@@ -1,6 +1,6 @@
 import streamlit as st
 
-# ✅ Must be first
+# First Streamlit command
 st.set_page_config(page_title="MLB Projection Checker", layout="centered")
 
 import pandas as pd
@@ -10,58 +10,59 @@ from datetime import datetime, timedelta
 from PIL import Image
 from utils import fetch_boxscore, evaluate_projections
 
-# 🖼️ Logo
+# Logo
 logo_path = os.path.join(os.path.dirname(__file__), "logo.png")
 logo = Image.open(logo_path)
 st.image(logo, width=300)
 
-# 🏷️ Title
+# Title
 st.title("⚾ MLB Player Projection Checker")
-st.markdown("Enter projections and check results from live or recent MLB games.")
+st.markdown("Enter player projections, choose a date, and view live or final results.")
 
-# 📥 Initialize session state
+# Initialize projections state
 if "manual_projections" not in st.session_state:
     st.session_state.manual_projections = []
 
-# 📝 Manual Entry Form
+# Form to add projection
 with st.form("manual_input"):
     st.subheader("📝 Add Player Projection")
-    player = st.text_input("Player Name (e.g. Aaron Judge)")
+    player = st.text_input("Player Name")
     metric = st.selectbox("Metric", ["hits", "homeRuns", "totalBases", "rbi", "baseOnBalls", "runs", "stolenBases"])
-    target = st.number_input("Target Value", value=1)
-    submitted = st.form_submit_button("Add to Table")
+    target = st.number_input("Target", value=1)
+    add = st.form_submit_button("Add")
 
-    if submitted and player and metric:
+    if add and player and metric:
         st.session_state.manual_projections.append({
             "Player": player,
             "Metric": metric,
             "Target": target
         })
 
-# 📋 Show projection list with inline delete buttons
+# Display projections with delete buttons inline
 st.subheader("📋 Current Projections")
 if st.session_state.manual_projections:
     for i, row in enumerate(st.session_state.manual_projections):
         cols = st.columns([4, 3, 2, 1])
         cols[0].markdown(f"**{row['Player']}**")
-        cols[1].markdown(f"{row['Metric']}")
-        cols[2].markdown(f"{row['Target']}")
-        if cols[3].button("❌", key=f"delete_{i}"):
-            st.session_state.manual_projections.pop(i)
-            st.experimental_rerun()
+        cols[1].markdown(row["Metric"])
+        cols[2].markdown(str(row["Target"]))
+        if cols[3].button("❌", key=f"del_{i}_{row['Player']}"):
+            del st.session_state.manual_projections[i]
+            st.experimental_set_query_params()  # triggers re-render safely
+            break  # Exit loop to avoid index mismatch
 else:
-    st.markdown("_No projections added yet._")
+    st.markdown("_No players added._")
 
-# 📄 Convert to DataFrame for results
+# Turn into DataFrame for processing
 projections_df = pd.DataFrame(st.session_state.manual_projections)
 
-# 📅 Dropdown date picker
+# Date dropdown (last 7 days including today)
 recent_days = [datetime.now().date() - timedelta(days=i) for i in range(7)]
 date_options = [d.strftime("%Y-%m-%d") for d in recent_days]
-selected_date_str = st.selectbox("📅 Choose a game date", date_options)
+selected_date = st.selectbox("📅 Choose a game date", date_options)
 
-# 🔄 Load game IDs
-schedule_url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={selected_date_str}"
+# Fetch schedule and game IDs
+schedule_url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={selected_date}"
 response = requests.get(schedule_url)
 data = response.json()
 
@@ -72,9 +73,9 @@ game_ids = [
     if game.get("status", {}).get("abstractGameState") in ["Final", "Live", "In Progress"]
 ]
 
-st.info(f"🔁 Loading {len(game_ids)} game(s) from {selected_date_str}")
+st.info(f"🔁 Loaded {len(game_ids)} game(s) from {selected_date}")
 
-# 📊 Results
+# Results
 if not projections_df.empty:
     st.subheader("📊 Results")
     boxscores = [fetch_boxscore(gid) for gid in game_ids]
@@ -84,7 +85,7 @@ if not projections_df.empty:
     results_df = pd.DataFrame(results)
     st.dataframe(results_df)
 
-    csv = results_df.to_csv(index=False).encode('utf-8')
-    st.download_button("📥 Download Results as CSV", data=csv, file_name="projection_results.csv", mime="text/csv")
+    csv = results_df.to_csv(index=False).encode("utf-8")
+    st.download_button("📥 Download CSV", data=csv, file_name="results.csv", mime="text/csv")
 else:
-    st.warning("Enter at least one projection to begin.")
+    st.warning("Add at least one player projection to begin.")
