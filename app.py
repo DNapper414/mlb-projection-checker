@@ -13,17 +13,17 @@ from utils import fetch_boxscore, evaluate_projections
 # 🖼️ Load logo
 logo_path = os.path.join(os.path.dirname(__file__), "logo.png")
 logo = Image.open(logo_path)
-st.image(logo, use_column_width=True)
+st.image(logo, use_container_width=True)
 
 # 🏷️ Title and instructions
 st.title("⚾ MLB Player Projection Checker")
-st.markdown("Enter player projections, choose a game date, and compare results to real MLB stats.")
+st.markdown("Enter player projections, select a game date, and compare results with real MLB stats.")
 
-# ✅ Session state setup
+# ✅ Initialize session state
 if "manual_projections" not in st.session_state:
     st.session_state.manual_projections = []
 
-# 📝 Projection Entry Form
+# 📝 Form for adding player projections
 with st.form("manual_input"):
     st.subheader("📝 Add Player Projection")
     player = st.text_input("Player Name (e.g. Aaron Judge)")
@@ -38,7 +38,7 @@ with st.form("manual_input"):
             "Target": target
         })
 
-# 📅 Date selector (last 7 days)
+# 📅 Date selector (past 7 days)
 recent_days = [datetime.now().date() - timedelta(days=i) for i in range(7)]
 date_options = [d.strftime("%Y-%m-%d") for d in recent_days]
 selected_date = st.selectbox("📅 Choose a game date", date_options)
@@ -55,19 +55,19 @@ game_ids = [
     if game.get("status", {}).get("abstractGameState") in ["Final", "Live", "In Progress"]
 ]
 
-st.info(f"🔁 Loaded {len(game_ids)} game(s) from {selected_date}")
+st.info(f"🔁 Loaded {len(game_ids)} game(s) for {selected_date}")
 
-# 📊 Generate results
+# 📊 Evaluate and display results
 projections_df = pd.DataFrame(st.session_state.manual_projections)
 
 if not projections_df.empty:
     st.subheader("📊 Results")
 
-    # Load box scores
+    # Fetch all box scores
     boxscores = [fetch_boxscore(gid) for gid in game_ids]
     boxscores = [b for b in boxscores if b]
 
-    # Evaluate projections if not already cached
+    # Evaluate once
     if "results" not in st.session_state:
         st.session_state.results = evaluate_projections(projections_df, boxscores)
 
@@ -81,10 +81,9 @@ if not projections_df.empty:
         header[4].markdown("**Met?**")
         header[5].markdown("**Remove Player**")
 
-        # Track selected row to remove
         player_to_remove = None
 
-        # Render rows with delete buttons
+        # Display results with delete button
         for i, row in enumerate(st.session_state.results):
             cols = st.columns(6)
             cols[0].markdown(row["Player"])
@@ -95,17 +94,17 @@ if not projections_df.empty:
             if cols[5].button("❌", key=f"delete_{i}"):
                 player_to_remove = i
 
-        # Apply deletion
+        # Remove player if flagged
         if player_to_remove is not None:
             del st.session_state.results[player_to_remove]
             st.rerun()
 
-        # Download results
+        # CSV export
         if st.session_state.results:
             df_clean = pd.DataFrame(st.session_state.results)
             csv = df_clean.to_csv(index=False).encode("utf-8")
             st.download_button("📥 Download Results CSV", data=csv, file_name="results.csv", mime="text/csv")
     else:
-        st.info("No results to display. Add projections above.")
+        st.info("No results to show. Add projections above.")
 else:
-    st.warning("Enter at least one player projection to begin.")
+    st.warning("Please enter at least one player projection.")
