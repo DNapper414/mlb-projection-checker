@@ -12,22 +12,26 @@ uploaded_file = st.file_uploader("📁 Upload CSV with Projections", type=["csv"
 
 if uploaded_file:
     projections_df = pd.read_csv(uploaded_file)
-else:
-    with st.form("manual_input"):
-        st.subheader("📝 Manual Projection Entry")
-        player = st.text_input("Player Name (e.g. Aaron Judge)")
-        metric = st.selectbox("Metric", ["hits", "homeRuns", "totalBases", "rbi", "baseOnBalls", "runs", "stolenBases"])
-        target = st.number_input("Target Value", value=1)
-        submitted = st.form_submit_button("Add to Table")
+# Initialize session state to store manual projections
+if "manual_projections" not in st.session_state:
+    st.session_state.manual_projections = []
 
-        if submitted:
-            projections_df = pd.DataFrame([{
-                "Player": player,
-                "Metric": metric,
-                "Target": target
-            }])
-        else:
-            projections_df = pd.DataFrame(columns=["Player", "Metric", "Target"])
+with st.form("manual_input"):
+    st.subheader("📝 Manual Projection Entry")
+    player = st.text_input("Player Name (e.g. Aaron Judge)")
+    metric = st.selectbox("Metric", ["hits", "homeRuns", "totalBases", "rbi", "baseOnBalls", "runs", "stolenBases"])
+    target = st.number_input("Target Value", value=1)
+    submitted = st.form_submit_button("Add to Table")
+
+    if submitted and player and metric:
+        st.session_state.manual_projections.append({
+            "Player": player,
+            "Metric": metric,
+            "Target": target
+        })
+
+# Convert manual entries to DataFrame
+projections_df = pd.DataFrame(st.session_state.manual_projections)
 
 from datetime import datetime, timedelta
 import requests
