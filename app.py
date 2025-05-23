@@ -1,6 +1,6 @@
 import streamlit as st
 
-# Must be first
+# ✅ Must be first
 st.set_page_config(page_title="MLB Projection Checker", layout="centered")
 
 import pandas as pd
@@ -10,19 +10,20 @@ from datetime import datetime, timedelta
 from PIL import Image
 from utils import fetch_boxscore, evaluate_projections
 
-# 🖼️ Load logo
+# 🖼️ Logo
 logo_path = os.path.join(os.path.dirname(__file__), "logo.png")
 logo = Image.open(logo_path)
 st.image(logo, width=300)
 
-# 🏷️ App Title
+# 🏷️ Title
 st.title("⚾ MLB Player Projection Checker")
-st.markdown("Enter your player projections and compare them to live or final MLB game stats.")
+st.markdown("Enter projections and check results from live or recent MLB games.")
 
-# 📝 Manual Player Entry
+# 📥 Initialize session state
 if "manual_projections" not in st.session_state:
     st.session_state.manual_projections = []
 
+# 📝 Manual Entry Form
 with st.form("manual_input"):
     st.subheader("📝 Add Player Projection")
     player = st.text_input("Player Name (e.g. Aaron Judge)")
@@ -37,7 +38,7 @@ with st.form("manual_input"):
             "Target": target
         })
 
-# 📋 Inline Editable Table
+# 📋 Show projection list with inline delete buttons
 st.subheader("📋 Current Projections")
 if st.session_state.manual_projections:
     for i, row in enumerate(st.session_state.manual_projections):
@@ -51,14 +52,15 @@ if st.session_state.manual_projections:
 else:
     st.markdown("_No projections added yet._")
 
+# 📄 Convert to DataFrame for results
 projections_df = pd.DataFrame(st.session_state.manual_projections)
 
-# 📅 Game Date Selection
+# 📅 Dropdown date picker
 recent_days = [datetime.now().date() - timedelta(days=i) for i in range(7)]
 date_options = [d.strftime("%Y-%m-%d") for d in recent_days]
 selected_date_str = st.selectbox("📅 Choose a game date", date_options)
 
-# 🔄 Fetch game IDs
+# 🔄 Load game IDs
 schedule_url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={selected_date_str}"
 response = requests.get(schedule_url)
 data = response.json()
@@ -72,7 +74,7 @@ game_ids = [
 
 st.info(f"🔁 Loading {len(game_ids)} game(s) from {selected_date_str}")
 
-# 📊 Results Table
+# 📊 Results
 if not projections_df.empty:
     st.subheader("📊 Results")
     boxscores = [fetch_boxscore(gid) for gid in game_ids]
@@ -85,4 +87,4 @@ if not projections_df.empty:
     csv = results_df.to_csv(index=False).encode('utf-8')
     st.download_button("📥 Download Results as CSV", data=csv, file_name="projection_results.csv", mime="text/csv")
 else:
-    st.warning("Add at least one projection to compare stats.")
+    st.warning("Enter at least one projection to begin.")
