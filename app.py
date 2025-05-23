@@ -1,6 +1,6 @@
 import streamlit as st
 
-# ✅ Must be the first Streamlit command
+# Must be first
 st.set_page_config(page_title="MLB Projection Checker", layout="centered")
 
 import pandas as pd
@@ -10,16 +10,16 @@ from datetime import datetime, timedelta
 from PIL import Image
 from utils import fetch_boxscore, evaluate_projections
 
-# 🖼️ Load and display logo
+# 🖼️ Load logo
 logo_path = os.path.join(os.path.dirname(__file__), "logo.png")
 logo = Image.open(logo_path)
 st.image(logo, width=300)
 
-# 🏷️ Title
+# 🏷️ App Title
 st.title("⚾ MLB Player Projection Checker")
-st.markdown("Enter player prop projections and select a date to check results (live or completed games).")
+st.markdown("Enter your player projections and compare them to live or final MLB game stats.")
 
-# 📝 Manual Projections
+# 📝 Manual Player Entry
 if "manual_projections" not in st.session_state:
     st.session_state.manual_projections = []
 
@@ -37,26 +37,28 @@ with st.form("manual_input"):
             "Target": target
         })
 
-# 🚮 Show and manage current projections
+# 📋 Inline Editable Table
 st.subheader("📋 Current Projections")
-
-for i, row in enumerate(st.session_state.manual_projections):
-    col1, col2, col3, col4, col5 = st.columns([4, 3, 2, 1, 1])
-    col1.write(row["Player"])
-    col2.write(row["Metric"])
-    col3.write(str(row["Target"]))
-    if col4.button("❌", key=f"delete_{i}"):
-        st.session_state.manual_projections.pop(i)
-        st.experimental_rerun()
+if st.session_state.manual_projections:
+    for i, row in enumerate(st.session_state.manual_projections):
+        cols = st.columns([4, 3, 2, 1])
+        cols[0].markdown(f"**{row['Player']}**")
+        cols[1].markdown(f"{row['Metric']}")
+        cols[2].markdown(f"{row['Target']}")
+        if cols[3].button("❌", key=f"delete_{i}"):
+            st.session_state.manual_projections.pop(i)
+            st.experimental_rerun()
+else:
+    st.markdown("_No projections added yet._")
 
 projections_df = pd.DataFrame(st.session_state.manual_projections)
 
-# 📅 Select a game date (today + past 6 days)
+# 📅 Game Date Selection
 recent_days = [datetime.now().date() - timedelta(days=i) for i in range(7)]
 date_options = [d.strftime("%Y-%m-%d") for d in recent_days]
 selected_date_str = st.selectbox("📅 Choose a game date", date_options)
 
-# 🔄 Fetch all game IDs (Final OR In Progress)
+# 🔄 Fetch game IDs
 schedule_url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={selected_date_str}"
 response = requests.get(schedule_url)
 data = response.json()
@@ -70,7 +72,7 @@ game_ids = [
 
 st.info(f"🔁 Loading {len(game_ids)} game(s) from {selected_date_str}")
 
-# 📊 Stat comparison and results
+# 📊 Results Table
 if not projections_df.empty:
     st.subheader("📊 Results")
     boxscores = [fetch_boxscore(gid) for gid in game_ids]
@@ -83,4 +85,4 @@ if not projections_df.empty:
     csv = results_df.to_csv(index=False).encode('utf-8')
     st.download_button("📥 Download Results as CSV", data=csv, file_name="projection_results.csv", mime="text/csv")
 else:
-    st.warning("Enter at least one player projection to begin.")
+    st.warning("Add at least one projection to compare stats.")
