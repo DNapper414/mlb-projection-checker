@@ -1,6 +1,6 @@
 import streamlit as st
 
-# Set page config first
+# Set page config
 st.set_page_config(page_title="MLB Projection Checker", layout="centered")
 
 import pandas as pd
@@ -10,20 +10,29 @@ from datetime import datetime, timedelta
 from PIL import Image
 from utils import fetch_boxscore, evaluate_projections
 
-# 🖼️ Load and display logo
+# 🧠 Cached store for projections
+@st.cache_data(show_spinner=False)
+def load_cached_projections():
+    return []
+
+@st.cache_data(show_spinner=False)
+def save_cached_projections(projections):
+    return projections
+
+# Initialize state from cache
+if "manual_projections" not in st.session_state:
+    st.session_state.manual_projections = load_cached_projections()
+
+# 🖼️ Logo
 logo_path = os.path.join(os.path.dirname(__file__), "logo.png")
 logo = Image.open(logo_path)
 st.image(logo, use_container_width=True)
 
-# Title and instructions
+# Title
 st.title("⚾ MLB Player Projection Checker")
-st.markdown("Enter player projections, choose a game date, and compare results to real MLB stats.")
+st.markdown("Enter player projections, choose a game date, and compare to real MLB stats.")
 
-# ✅ Session state for projections
-if "manual_projections" not in st.session_state:
-    st.session_state.manual_projections = []
-
-# 📝 Manual projection form
+# 📋 Manual entry
 with st.form("manual_input"):
     st.subheader("📝 Add Player Projection")
     player = st.text_input("Player Name (e.g. Aaron Judge)")
@@ -37,13 +46,15 @@ with st.form("manual_input"):
             "Metric": metric,
             "Target": target
         })
+        save_cached_projections(st.session_state.manual_projections)
+        st.rerun()
 
-# 📅 Select game date
+# 📅 Game date dropdown
 recent_days = [datetime.now().date() - timedelta(days=i) for i in range(7)]
 date_options = [d.strftime("%Y-%m-%d") for d in recent_days]
 selected_date = st.selectbox("📅 Choose a game date", date_options)
 
-# 🔄 Load game IDs
+# 🔄 Fetch MLB game IDs
 schedule_url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={selected_date}"
 response = requests.get(schedule_url)
 data = response.json()
@@ -57,26 +68,22 @@ game_ids = [
 
 st.info(f"🔁 Loaded {len(game_ids)} game(s) for {selected_date}")
 
-# 📊 Results logic
+# Results generation
 projections_df = pd.DataFrame(st.session_state.manual_projections)
 
 if not projections_df.empty:
     st.subheader("📊 Results")
 
-    # 🧹 Optional clear all button
     if st.button("🧹 Clear All Projections"):
-        st.session_state.manual_projections.clear()
+        st.session_state.manual_projections = []
+        save_cached_projections([])
         st.rerun()
 
-    # Fetch boxscores
     boxscores = [fetch_boxscore(gid) for gid in game_ids]
     boxscores = [b for b in boxscores if b]
+    results = evaluate_projections(projections_df, boxscores)
 
-    # Always re-evaluate (for duplicates to work)
-    st.session_state.results = evaluate_projections(projections_df, boxscores)
-
-    if st.session_state.results:
-        # Column headers
+    if results:
         header = st.columns(6)
         header[0].markdown("**Player**")
         header[1].markdown("**Metric**")
@@ -87,7 +94,7 @@ if not projections_df.empty:
 
         player_to_remove = None
 
-        for i, row in enumerate(st.session_state.results):
+        for i, row in enumerate(results):
             cols = st.columns(6)
             cols[0].markdown(row["Player"])
             cols[1].markdown(row["Metric"])
@@ -97,17 +104,15 @@ if not projections_df.empty:
             if cols[5].button("❌", key=f"delete_{i}"):
                 player_to_remove = i
 
-        # Handle row deletion
         if player_to_remove is not None:
             del st.session_state.manual_projections[player_to_remove]
+            save_cached_projections(st.session_state.manual_projections)
             st.rerun()
 
-        # CSV download
-        df_clean = pd.DataFrame(st.session_state.results)
+        df_clean = pd.DataFrame(results)
         csv = df_clean.to_csv(index=False).encode("utf-8")
         st.download_button("📥 Download Results CSV", data=csv, file_name="results.csv", mime="text/csv")
-
     else:
-        st.info("No results to show. Add projections above.")
+        st.info("No results to show.")
 else:
-    st.warning("Please enter at least one player projection to begin.")
+    st.warning("Enter at least one projection to begin.")
