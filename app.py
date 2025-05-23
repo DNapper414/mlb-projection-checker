@@ -1,6 +1,6 @@
 import streamlit as st
 
-# Must be first
+# Set page configuration
 st.set_page_config(page_title="MLB Projection Checker", layout="centered")
 
 import pandas as pd
@@ -10,20 +10,20 @@ from datetime import datetime, timedelta
 from PIL import Image
 from utils import fetch_boxscore, evaluate_projections
 
-# 🖼️ Logo
+# 🖼️ Load logo
 logo_path = os.path.join(os.path.dirname(__file__), "logo.png")
 logo = Image.open(logo_path)
-st.image(logo, width=300)
+st.image(logo, use_column_width=True)
 
-# 🏷️ Title
+# 🏷️ Title and instructions
 st.title("⚾ MLB Player Projection Checker")
-st.markdown("Enter player projections, choose a game date, and compare results with live or recent stats.")
+st.markdown("Enter player projections, choose a game date, and compare results to real MLB stats.")
 
-# 🔁 Manual projections stored in session
+# ✅ Session state setup
 if "manual_projections" not in st.session_state:
     st.session_state.manual_projections = []
 
-# 📝 Form to enter projection
+# 📝 Projection Entry Form
 with st.form("manual_input"):
     st.subheader("📝 Add Player Projection")
     player = st.text_input("Player Name (e.g. Aaron Judge)")
@@ -38,12 +38,12 @@ with st.form("manual_input"):
             "Target": target
         })
 
-# 📅 Game date dropdown
+# 📅 Date selector (last 7 days)
 recent_days = [datetime.now().date() - timedelta(days=i) for i in range(7)]
 date_options = [d.strftime("%Y-%m-%d") for d in recent_days]
 selected_date = st.selectbox("📅 Choose a game date", date_options)
 
-# 🔄 Fetch MLB game IDs
+# 🔄 Fetch game IDs from MLB API
 schedule_url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={selected_date}"
 response = requests.get(schedule_url)
 data = response.json()
@@ -57,22 +57,23 @@ game_ids = [
 
 st.info(f"🔁 Loaded {len(game_ids)} game(s) from {selected_date}")
 
-# 📊 Evaluate projections
+# 📊 Generate results
 projections_df = pd.DataFrame(st.session_state.manual_projections)
 
 if not projections_df.empty:
     st.subheader("📊 Results")
 
+    # Load box scores
     boxscores = [fetch_boxscore(gid) for gid in game_ids]
     boxscores = [b for b in boxscores if b]
 
-    # Evaluate if not yet done
+    # Evaluate projections if not already cached
     if "results" not in st.session_state:
         st.session_state.results = evaluate_projections(projections_df, boxscores)
 
-    # Column headers
     if st.session_state.results:
-        header = st.columns([3, 2, 2, 2, 2, 2])
+        # Column headers
+        header = st.columns(6)
         header[0].markdown("**Player**")
         header[1].markdown("**Metric**")
         header[2].markdown("**Target**")
@@ -80,13 +81,13 @@ if not projections_df.empty:
         header[4].markdown("**Met?**")
         header[5].markdown("**Remove Player**")
 
-        # Track if a row was clicked for removal
+        # Track selected row to remove
         player_to_remove = None
 
-        # Display rows
+        # Render rows with delete buttons
         for i, row in enumerate(st.session_state.results):
-            cols = st.columns([3, 2, 2, 2, 2, 2])
-            cols[0].markdown(f"{row['Player']}")
+            cols = st.columns(6)
+            cols[0].markdown(row["Player"])
             cols[1].markdown(row["Metric"])
             cols[2].markdown(f"🎯 {row['Target']}")
             cols[3].markdown(f"📊 {row['Actual']}")
@@ -94,17 +95,17 @@ if not projections_df.empty:
             if cols[5].button("❌", key=f"delete_{i}"):
                 player_to_remove = i
 
-        # Apply deletion after loop
+        # Apply deletion
         if player_to_remove is not None:
             del st.session_state.results[player_to_remove]
             st.rerun()
 
-        # CSV download
+        # Download results
         if st.session_state.results:
             df_clean = pd.DataFrame(st.session_state.results)
             csv = df_clean.to_csv(index=False).encode("utf-8")
             st.download_button("📥 Download Results CSV", data=csv, file_name="results.csv", mime="text/csv")
     else:
-        st.info("No results to show. Add projections above.")
+        st.info("No results to display. Add projections above.")
 else:
-    st.warning("Please enter at least one player projection.")
+    st.warning("Enter at least one player projection to begin.")
