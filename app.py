@@ -1,6 +1,6 @@
 import streamlit as st
 
-# ✅ Must be first Streamlit command
+# ✅ Must be the first Streamlit command
 st.set_page_config(page_title="MLB Projection Checker", layout="centered")
 
 import pandas as pd
@@ -10,21 +10,21 @@ from datetime import datetime, timedelta
 from PIL import Image
 from utils import fetch_boxscore, evaluate_projections
 
-# 🖼️ Logo
+# 🖼️ Load and display logo
 logo_path = os.path.join(os.path.dirname(__file__), "logo.png")
 logo = Image.open(logo_path)
 st.image(logo, width=300)
 
 # 🏷️ Title
 st.title("⚾ MLB Player Projection Checker")
-st.markdown("Enter player prop projections and check results based on live or recent MLB games.")
+st.markdown("Enter player prop projections and select a date to check results (live or completed games).")
 
 # 📝 Manual Projections
 if "manual_projections" not in st.session_state:
     st.session_state.manual_projections = []
 
 with st.form("manual_input"):
-    st.subheader("📝 Manual Projection Entry")
+    st.subheader("📝 Add Player Projection")
     player = st.text_input("Player Name (e.g. Aaron Judge)")
     metric = st.selectbox("Metric", ["hits", "homeRuns", "totalBases", "rbi", "baseOnBalls", "runs", "stolenBases"])
     target = st.number_input("Target Value", value=1)
@@ -37,9 +37,21 @@ with st.form("manual_input"):
             "Target": target
         })
 
+# 🚮 Show and manage current projections
+st.subheader("📋 Current Projections")
+
+for i, row in enumerate(st.session_state.manual_projections):
+    col1, col2, col3, col4, col5 = st.columns([4, 3, 2, 1, 1])
+    col1.write(row["Player"])
+    col2.write(row["Metric"])
+    col3.write(str(row["Target"]))
+    if col4.button("❌", key=f"delete_{i}"):
+        st.session_state.manual_projections.pop(i)
+        st.experimental_rerun()
+
 projections_df = pd.DataFrame(st.session_state.manual_projections)
 
-# 📅 Dropdown for Today + Past 6 Days
+# 📅 Select a game date (today + past 6 days)
 recent_days = [datetime.now().date() - timedelta(days=i) for i in range(7)]
 date_options = [d.strftime("%Y-%m-%d") for d in recent_days]
 selected_date_str = st.selectbox("📅 Choose a game date", date_options)
@@ -58,7 +70,7 @@ game_ids = [
 
 st.info(f"🔁 Loading {len(game_ids)} game(s) from {selected_date_str}")
 
-# 📊 Stat comparison
+# 📊 Stat comparison and results
 if not projections_df.empty:
     st.subheader("📊 Results")
     boxscores = [fetch_boxscore(gid) for gid in game_ids]
