@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from PIL import Image
 from utils import fetch_boxscore, evaluate_projections
 
-# Set up page
+# Set page config
 st.set_page_config(page_title="MLB Projection Checker", layout="centered")
 
 # ---------------------------
@@ -24,7 +24,7 @@ st.markdown(f"""
 <script>
 const key = "{local_storage_key}";
 
-// Initialize or sync from localStorage
+// Sync from localStorage on load
 const saved = localStorage.getItem(key);
 if (saved && !window._synced) {{
     const textarea = window.parent.document.querySelector('textarea[data-testid="stTextArea"]');
@@ -33,7 +33,7 @@ if (saved && !window._synced) {{
     window._synced = true;
 }}
 
-// Hook to watch changes and update localStorage
+// Watch for changes to store in localStorage
 const textarea = window.parent.document.querySelector('textarea[data-testid="stTextArea"]');
 const observer = new MutationObserver(() => {{
     localStorage.setItem(key, textarea.value);
@@ -82,7 +82,7 @@ with st.form("manual_input"):
             "Metric": metric,
             "Target": target
         })
-        st.experimental_rerun()
+        st.rerun()
 
 # -------------------------
 # Game date selection + API
@@ -115,10 +115,11 @@ if not projections_df.empty:
 
     if st.button("🧹 Clear All Projections"):
         st.session_state.manual_projections = []
-        st.experimental_rerun()
+        st.rerun()
 
     boxscores = [fetch_boxscore(gid) for gid in game_ids]
     boxscores = [b for b in boxscores if b]
+
     results = evaluate_projections(projections_df, boxscores)
 
     if results:
@@ -139,7 +140,7 @@ if not projections_df.empty:
             cols[4].markdown(row["✅ Met?"])
             if cols[5].button("❌", key=f"delete_{i}"):
                 st.session_state.manual_projections.pop(i)
-                st.experimental_rerun()
+                st.rerun()
 
         df_clean = pd.DataFrame(results)
         csv = df_clean.to_csv(index=False).encode("utf-8")
