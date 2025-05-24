@@ -1,8 +1,8 @@
 import requests
 
-# ------------------
-# MLB Functions
-# ------------------
+# -----------------------
+# MLB Support
+# -----------------------
 
 def fetch_boxscore(game_id):
     url = f"https://statsapi.mlb.com/api/v1/game/{game_id}/boxscore"
@@ -13,20 +13,30 @@ def fetch_boxscore(game_id):
 
 def evaluate_projections(projections_df, boxscores):
     results = []
+
     for _, row in projections_df.iterrows():
-        player_name = row["Player"].lower()
+        player_name = row["Player"].strip().lower()
         metric = row["Metric"]
         target = row["Target"]
         actual = 0
+        found = False
 
         for box in boxscores:
             for team in ["home", "away"]:
                 players = box["teams"][team]["players"]
-                for pid, pdata in players.items():
-                    full_name = pdata["person"]["fullName"].lower()
+                for pdata in players.values():
+                    full_name = pdata["person"]["fullName"].strip().lower()
                     if full_name == player_name:
                         stats = pdata.get("stats", {}).get("batting", {})
-                        actual = stats.get(metric, 0)
+                        if stats:
+                            actual = stats.get(metric, 0)
+                            found = True
+                            break
+                if found:
+                    break
+            if found:
+                break
+
         results.append({
             "Player": row["Player"],
             "Metric": metric,
@@ -34,23 +44,24 @@ def evaluate_projections(projections_df, boxscores):
             "Actual": actual,
             "✅ Met?": actual >= target
         })
+
     return results
 
-# ------------------
-# NBA Functions
-# ------------------
+# -----------------------
+# NBA Support
+# -----------------------
 
 def fetch_boxscore_nba(date_str):
-    # Uses https://www.balldontlie.io
+    # Uses balldontlie.io API
     url = f"https://www.balldontlie.io/api/v1/stats?start_date={date_str}&end_date={date_str}&per_page=100"
     all_stats = []
     page = 1
     while True:
-        paged = f"{url}&page={page}"
-        r = requests.get(paged).json()
-        data = r.get("data", [])
+        paged_url = f"{url}&page={page}"
+        resp = requests.get(paged_url).json()
+        data = resp.get("data", [])
         all_stats.extend(data)
-        if r.get("meta", {}).get("next_page") is None:
+        if resp.get("meta", {}).get("next_page") is None:
             break
         page += 1
     return all_stats
@@ -60,19 +71,18 @@ def evaluate_projections_nba(projections_df, game_date):
     results = []
 
     for _, row in projections_df.iterrows():
-        name = row["Player"].lower()
+        name = row["Player"].strip().lower()
         metric = row["Metric"]
         target = row["Target"]
         actual = 0
 
         for stat in boxscores:
-            full_name = f"{stat['player']['first_name']} {stat['player']['last_name']}".lower()
+            full_name = f"{stat['player']['first_name']} {stat['player']['last_name']}".strip().lower()
             if full_name == name:
-                stats = stat
                 if metric == "PRA":
-                    actual = stats["pts"] + stats["reb"] + stats["ast"]
+                    actual = stat["pts"] + stat["reb"] + stat["ast"]
                 elif metric == "3pts made":
-                    actual = stats["fg3m"]
+                    actual = stat["fg3m"]
                 else:
                     key_map = {
                         "points": "pts",
@@ -81,7 +91,7 @@ def evaluate_projections_nba(projections_df, game_date):
                         "steals": "stl",
                         "blocks": "blk"
                     }
-                    actual = stats.get(key_map[metric], 0)
+                    actual = stat.get(key_map.get(metric, ""), 0)
                 break
 
         results.append({
