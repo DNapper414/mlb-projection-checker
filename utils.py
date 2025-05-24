@@ -17,11 +17,13 @@ def fetch_boxscore(game_id):
 def evaluate_projections(projections_df, boxscores):
     results = []
     for _, row in projections_df.iterrows():
-        player_name = row["Player"].strip().lower()
-        metric = row["Metric"]
-        target = row["Target"]
+        # Handle both capitalized and lowercase keys
+        player_name = row.get("Player", row.get("player", "")).strip().lower()
+        metric = row.get("Metric", row.get("metric", ""))
+        target = row.get("Target", row.get("target", 0))
         actual = 0
         found = False
+
         for box in boxscores:
             for team in ["home", "away"]:
                 players = box["teams"][team]["players"]
@@ -37,8 +39,9 @@ def evaluate_projections(projections_df, boxscores):
                     break
             if found:
                 break
+
         results.append({
-            "Player": row["Player"],
+            "Player": row.get("Player", row.get("player", "")),
             "Metric": metric,
             "Target": target,
             "Actual": actual,
@@ -97,9 +100,9 @@ def evaluate_projections_nba_nbaapi(projections_df, date_str):
     results = []
 
     for _, row in projections_df.iterrows():
-        input_name = row["Player"].strip().lower()
-        metric = row["Metric"]
-        target = row["Target"]
+        input_name = row.get("Player", row.get("player", "")).strip().lower()
+        metric = row.get("Metric", row.get("metric", ""))
+        target = row.get("Target", row.get("target", 0))
         actual = 0
         found = False
 
@@ -130,7 +133,7 @@ def evaluate_projections_nba_nbaapi(projections_df, date_str):
                 break
 
         results.append({
-            "Player": row["Player"],
+            "Player": row.get("Player", row.get("player", "")),
             "Metric": metric,
             "Target": target,
             "Actual": actual if found else "N/A",
