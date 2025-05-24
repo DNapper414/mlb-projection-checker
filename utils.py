@@ -49,66 +49,74 @@ def evaluate_projections(projections_df, boxscores):
     return results
 
 # -----------------------
-# NBA Support
+# NBA Support (RapidAPI)
 # -----------------------
 
-def fetch_boxscore_nba(date_str):
-    url = f"https://www.balldontlie.io/api/v1/stats?start_date={date_str}&end_date={date_str}&per_page=100"
-    all_stats = []
-    page = 1
-    while True:
-        paged_url = f"{url}&page={page}"
-        try:
-            resp = requests.get(paged_url)
-            if resp.status_code != 200:
-                print(f"Failed to fetch NBA data (status {resp.status_code})")
-                break
-            data_json = resp.json()
-            data = data_json.get("data", [])
-            all_stats.extend(data)
-            if not data_json.get("meta", {}).get("next_page"):
-                break
-            page += 1
-        except Exception as e:
-            print(f"Error fetching NBA stats: {e}")
-            break
+RAPIDAPI_KEY = "47945fd24fmsh2539580c53289bdp119b7bjsne5525ec5acdf"
+RAPIDAPI_HOST = "api-basketball.p.rapidapi.com"
+HEADERS = {
+    "X-RapidAPI-Key": RAPIDAPI_KEY,
+    "X-RapidAPI-Host": RAPIDAPI_HOST,
+}
 
-    return all_stats
+def fetch_boxscore_nba(date_str):
+    # Get all games for the selected date
+    games_url = f"https://api-basketball.p.rapidapi.com/games?date={date_str}&league=12&season=2024-2025"
+    games_resp = requests.get(games_url, headers=HEADERS)
+    games = games_resp.json().get("response", [])
+    if not games:
+        return []
+
+    player_stats = []
+
+    # For each game, get stats
+    for game in games:
+        game_id = game["id"]
+        stats_url = f"https://api-basketball.p.rapidapi.com/players/statistics?game={game_id}"
+        stats_resp = requests.get(stats_url, headers=HEADERS)
+        stats = stats_resp.json().get("response", [])
+        player_stats.extend(stats)
+
+    return player_stats
 
 def evaluate_projections_nba(projections_df, game_date):
     boxscores = fetch_boxscore_nba(game_date)
     results = []
 
     for _, row in projections_df.iterrows():
-        name = row["Player"].strip().lower()
+        input_name = row["Player"].strip().lower()
         metric = row["Metric"]
         target = row["Target"]
         actual = 0
+        found = False
 
         for stat in boxscores:
-            full_name = f"{stat['player']['first_name']} {stat['player']['last_name']}".strip().lower()
-            if full_name == name:
+            full_name = f"{stat['player']['firstname']} {stat['player']['lastname']}".strip().lower()
+            if input_name == full_name or input_name in full_name:
+                found = True
+                stats = stat["statistics"]
+
                 if metric == "PRA":
-                    actual = stat["pts"] + stat["reb"] + stat["ast"]
+                    actual = stats.get("points", 0) + stats.get("rebounds", 0) + stats.get("assists", 0)
                 elif metric == "3pts made":
-                    actual = stat["fg3m"]
+                    actual = stats.get("threepoints_made", 0)
                 else:
-                    key_map = {
-                        "points": "pts",
-                        "assists": "ast",
-                        "rebounds": "reb",
-                        "steals": "stl",
-                        "blocks": "blk"
+                    metric_map = {
+                        "points": "points",
+                        "assists": "assists",
+                        "rebounds": "rebounds",
+                        "steals": "steals",
+                        "blocks": "blocks"
                     }
-                    actual = stat.get(key_map.get(metric, ""), 0)
+                    actual = stats.get(metric_map.get(metric, ""), 0)
                 break
 
         results.append({
             "Player": row["Player"],
             "Metric": metric,
             "Target": target,
-            "Actual": actual,
-            "✅ Met?": actual >= target
+            "Actual": actual if found else "N/A",
+            "✅ Met?": actual >= target if found else False
         })
 
     return results
