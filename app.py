@@ -23,7 +23,7 @@ from supabase_client import (
 st.set_page_config(page_title="Bet Tracker | Apprentice Ent.", layout="centered")
 st_autorefresh(interval=60000, key="auto_refresh")
 
-# --- Session ---
+# --- Session ID ---
 if "session_id" in st.query_params:
     session_id = st.query_params["session_id"]
 else:
@@ -31,13 +31,13 @@ else:
     st.query_params["session_id"] = session_id
 st.session_state.session_id = session_id
 
-# --- Sport selector ---
+# --- Sport Selector ---
 default_sport = st.query_params.get("sport", "MLB")
 sport = st.radio("Select Sport", ["MLB", "NBA"], index=0 if default_sport == "MLB" else 1)
 if st.query_params.get("sport") != sport:
     st.query_params["sport"] = sport
 
-# --- Custom CSS ---
+# --- Styles with Adaptive Font Color ---
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
@@ -46,7 +46,6 @@ st.markdown("""
 html, body, [class*="css"] {
     font-family: 'Inter', sans-serif;
     background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
-    color: #f8f8f8;
 }
 
 h1 span.satisfaction {
@@ -79,7 +78,7 @@ button:hover {
     box-shadow: 0 0 16px #00ffe1;
 }
 
-/* Table styling */
+/* Table Styles */
 table {
     width: 100%;
     border-collapse: collapse;
@@ -87,7 +86,6 @@ table {
     border-radius: 12px;
     overflow: hidden;
     font-size: 14px;
-    color: #f8f8f8;
 }
 
 th, td {
@@ -98,12 +96,16 @@ th, td {
 
 td {
     background-color: rgba(255, 255, 255, 0.04);
-    color: #f8f8f8 !important; /* ✅ THIS FIXES VISIBILITY */
 }
 
-th {
-    background-color: rgba(0,0,0,0.6);
-    color: #00ffe1;
+/* Adaptive font color */
+@media (prefers-color-scheme: dark) {
+    td { color: #ffffff; }
+    th { color: #00ffe1; background-color: rgba(0, 0, 0, 0.6); }
+}
+@media (prefers-color-scheme: light) {
+    td { color: #000000; }
+    th { color: #007777; background-color: #eeeeee; }
 }
 
 tr:hover {
@@ -127,7 +129,7 @@ tr:hover {
 </style>
 """, unsafe_allow_html=True)
 
-# --- UI Layout ---
+# --- UI Inputs ---
 st.markdown('<div class="card">', unsafe_allow_html=True)
 st.markdown("## 🏆 Bet Tracker by <span class='satisfaction'>Apprentice Ent.</span>", unsafe_allow_html=True)
 game_date = st.date_input("📅 Game Date", value=datetime.today())
@@ -138,18 +140,18 @@ if sport == "NBA":
     try:
         players = get_nba_players_today(game_date.strftime("%Y-%m-%d"))
     except:
-        st.warning("⚠️ NBA players could not be loaded.")
+        st.warning("⚠️ NBA players unavailable.")
 elif sport == "MLB":
     try:
         players = get_mlb_players_today(game_date.strftime("%Y-%m-%d"))
     except:
-        st.warning("⚠️ MLB players could not be loaded.")
+        st.warning("⚠️ MLB players unavailable.")
 
 player = st.selectbox("Player Name", players) if players else st.text_input("Player Name")
 metric = st.selectbox(
     "Metric",
-    ["points", "assists", "rebounds", "steals", "blocks", "3pts made", "PRA"] if sport == "NBA"
-    else ["hits", "homeRuns", "totalBases", "rbi", "baseOnBalls", "runs", "stolenBases"]
+    ["points", "assists", "rebounds", "steals", "blocks", "3pts made", "PRA"] if sport == "NBA" else
+    ["hits", "homeRuns", "totalBases", "rbi", "baseOnBalls", "runs", "stolenBases"]
 )
 target = st.number_input("Target", min_value=0, value=1)
 
@@ -163,17 +165,16 @@ if st.button("➕ Add to Table") and player:
         "actual": None,
         "session_id": session_id
     })
-    st.success(f"Projection added for {player}")
+    st.success(f"Added projection for {player}")
 st.markdown('</div>', unsafe_allow_html=True)
 
-# --- Load & Display ---
+# --- Load Data ---
 response = get_projections(session_id)
 filtered = [p for p in response.data if p["sport"] == sport and p["date"] == game_date.strftime("%Y-%m-%d")]
 
 if filtered:
     df = pd.DataFrame(filtered)
 
-    # Evaluate
     if sport == "MLB":
         url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={game_date.strftime('%Y-%m-%d')}"
         game_ids = [
@@ -189,6 +190,7 @@ if filtered:
 
     results_df = pd.DataFrame(results)
 
+    # --- Display Table ---
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.subheader("📊 Projection Results")
 
@@ -219,10 +221,11 @@ if filtered:
         </tr>
         """
     table_html += "</tbody></table>"
+
     html(table_html, height=520, scrolling=False)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # --- Export / Clear ---
+    # --- Export & Clear ---
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.subheader("📥 Export & Cleanup")
     csv = results_df.to_csv(index=False).encode("utf-8")
@@ -234,4 +237,4 @@ if filtered:
     st.markdown('</div>', unsafe_allow_html=True)
 
 else:
-    st.info("No projections yet for this date.")
+    st.info("No projections for this date.")
