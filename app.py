@@ -21,23 +21,26 @@ from supabase_client import (
     clear_projections
 )
 
-# Persistent session ID via query parameters (Streamlit v1.32+)
+# --- Persistent session_id using query params ---
 if "session_id" in st.query_params:
     session_id = st.query_params["session_id"]
 else:
     session_id = str(uuid.uuid4())
     st.query_params["session_id"] = session_id
-
 st.session_state.session_id = session_id
 
-# App UI
-st.title("🏀⚾ Bet Tracker by Apprentice Ent. Sports Picks")
+# --- Persistent sport selection using query params ---
+default_sport = st.query_params.get("sport", "MLB")
+sport = st.radio("Select Sport", ["MLB", "NBA"], index=0 if default_sport == "MLB" else 1)
+if st.query_params.get("sport") != sport:
+    st.query_params["sport"] = sport
 
-sport = st.radio("Select Sport", ["MLB", "NBA"])
+# --- UI Layout ---
+st.title("🏀⚾ Bet Tracker by Apprentice Ent. Sports Picks")
 game_date = st.date_input("📅 Choose Game Date", value=datetime.today())
 st.subheader(f"➕ Add {sport} Player Projection")
 
-# Autocomplete players
+# --- Autocomplete Players ---
 players = []
 if sport == "NBA":
     try:
@@ -60,7 +63,7 @@ metric = st.selectbox(
 )
 target = st.number_input("Target Value", min_value=0, value=1)
 
-# Add projection
+# --- Add Projection ---
 if st.button("➕ Add to Table") and player:
     add_projection({
         "sport": sport,
@@ -73,7 +76,7 @@ if st.button("➕ Add to Table") and player:
     })
     st.success(f"Projection added for {player}")
 
-# Load projections
+# --- Load & Evaluate Projections ---
 response = get_projections(session_id)
 projections = [p for p in response.data if p["sport"] == sport]
 
@@ -81,7 +84,6 @@ if projections:
     st.subheader("📊 Results")
     df = pd.DataFrame(projections)
 
-    # Evaluate projections
     if sport == "MLB":
         schedule_url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={game_date.strftime('%Y-%m-%d')}"
         resp = requests.get(schedule_url).json()
@@ -98,7 +100,7 @@ if projections:
 
     results_df = pd.DataFrame(results)
 
-    # Render table
+    # --- Render Results Table ---
     header = st.columns(6)
     header[0].markdown("**Player**")
     header[1].markdown("**Metric**")
@@ -118,7 +120,7 @@ if projections:
             remove_projection(df.iloc[i]["id"], session_id)
             st.rerun()
 
-    # Download CSV
+    # --- Download / Clear ---
     csv = results_df.to_csv(index=False).encode("utf-8")
     st.download_button("📥 Download Results CSV", csv, file_name="bet_results.csv")
 
