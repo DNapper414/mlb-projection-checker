@@ -37,7 +37,7 @@ sport = st.radio("Select Sport", ["MLB", "NBA"], index=0 if default_sport == "ML
 if st.query_params.get("sport") != sport:
     st.query_params["sport"] = sport
 
-# --- Styling ---
+# --- Custom CSS ---
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
@@ -51,8 +51,8 @@ html, body, [class*="css"] {
 
 h1 span.satisfaction {
     font-family: 'Satisfaction', cursive;
-    font-size: 2rem;
-    color: #fff;
+    font-size: 2.2rem;
+    color: #00ffe1;
 }
 
 .card {
@@ -79,6 +79,7 @@ button:hover {
     box-shadow: 0 0 16px #00ffe1;
 }
 
+/* Table styling */
 table {
     width: 100%;
     border-collapse: collapse;
@@ -96,8 +97,8 @@ th, td {
 }
 
 td {
-    color: #f0f0f0;  /* ✅ High contrast */
-    background-color: rgba(255, 255, 255, 0.02);
+    background-color: rgba(255, 255, 255, 0.04);
+    color: #f8f8f8 !important; /* ✅ THIS FIXES VISIBILITY */
 }
 
 th {
@@ -112,8 +113,7 @@ tr:hover {
 .trash {
     text-align: center;
     font-size: 20px;
-    cursor: not-allowed;
-    color: #ccc;
+    color: #aaa;
 }
 
 @media (max-width: 600px) {
@@ -127,7 +127,7 @@ tr:hover {
 </style>
 """, unsafe_allow_html=True)
 
-# --- Layout: Input ---
+# --- UI Layout ---
 st.markdown('<div class="card">', unsafe_allow_html=True)
 st.markdown("## 🏆 Bet Tracker by <span class='satisfaction'>Apprentice Ent.</span>", unsafe_allow_html=True)
 game_date = st.date_input("📅 Game Date", value=datetime.today())
@@ -138,12 +138,12 @@ if sport == "NBA":
     try:
         players = get_nba_players_today(game_date.strftime("%Y-%m-%d"))
     except:
-        st.warning("Could not load NBA players.")
+        st.warning("⚠️ NBA players could not be loaded.")
 elif sport == "MLB":
     try:
         players = get_mlb_players_today(game_date.strftime("%Y-%m-%d"))
     except:
-        st.warning("Could not load MLB players.")
+        st.warning("⚠️ MLB players could not be loaded.")
 
 player = st.selectbox("Player Name", players) if players else st.text_input("Player Name")
 metric = st.selectbox(
@@ -163,21 +163,22 @@ if st.button("➕ Add to Table") and player:
         "actual": None,
         "session_id": session_id
     })
-    st.success(f"Added projection for {player}")
+    st.success(f"Projection added for {player}")
 st.markdown('</div>', unsafe_allow_html=True)
 
-# --- Load projections ---
+# --- Load & Display ---
 response = get_projections(session_id)
 filtered = [p for p in response.data if p["sport"] == sport and p["date"] == game_date.strftime("%Y-%m-%d")]
 
 if filtered:
     df = pd.DataFrame(filtered)
 
+    # Evaluate
     if sport == "MLB":
-        schedule_url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={game_date.strftime('%Y-%m-%d')}"
+        url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={game_date.strftime('%Y-%m-%d')}"
         game_ids = [
             str(game["gamePk"])
-            for d in requests.get(schedule_url).json().get("dates", [])
+            for d in requests.get(url).json().get("dates", [])
             for game in d.get("games", [])
             if game.get("status", {}).get("abstractGameState") in ["Final", "Live", "In Progress"]
         ]
@@ -188,7 +189,6 @@ if filtered:
 
     results_df = pd.DataFrame(results)
 
-    # --- Results Card ---
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.subheader("📊 Projection Results")
 
@@ -219,11 +219,10 @@ if filtered:
         </tr>
         """
     table_html += "</tbody></table>"
-
     html(table_html, height=520, scrolling=False)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # --- Export & Cleanup ---
+    # --- Export / Clear ---
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.subheader("📥 Export & Cleanup")
     csv = results_df.to_csv(index=False).encode("utf-8")
@@ -233,5 +232,6 @@ if filtered:
         clear_projections(session_id)
         st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
+
 else:
     st.info("No projections yet for this date.")
