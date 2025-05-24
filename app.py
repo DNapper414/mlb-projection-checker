@@ -129,7 +129,11 @@ with st.form("manual_input"):
     st.subheader(f"📝 Add {sport} Player Projection")
 
     if sport == "NBA":
-        player = st.selectbox("Player Name", nba_players)
+        if nba_players:
+            player = st.selectbox("Player Name", nba_players)
+        else:
+            st.warning("⚠️ NBA player list couldn't load. You can type the name manually.")
+            player = st.text_input("Player Name")
     else:
         player = st.selectbox("Player Name", mlb_players)
 
