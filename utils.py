@@ -53,18 +53,26 @@ def evaluate_projections(projections_df, boxscores):
 # -----------------------
 
 def fetch_boxscore_nba(date_str):
-    # Uses balldontlie.io API
     url = f"https://www.balldontlie.io/api/v1/stats?start_date={date_str}&end_date={date_str}&per_page=100"
     all_stats = []
     page = 1
     while True:
         paged_url = f"{url}&page={page}"
-        resp = requests.get(paged_url).json()
-        data = resp.get("data", [])
-        all_stats.extend(data)
-        if resp.get("meta", {}).get("next_page") is None:
+        try:
+            resp = requests.get(paged_url)
+            if resp.status_code != 200:
+                print(f"Failed to fetch NBA data (status {resp.status_code})")
+                break
+            data_json = resp.json()
+            data = data_json.get("data", [])
+            all_stats.extend(data)
+            if not data_json.get("meta", {}).get("next_page"):
+                break
+            page += 1
+        except Exception as e:
+            print(f"Error fetching NBA stats: {e}")
             break
-        page += 1
+
     return all_stats
 
 def evaluate_projections_nba(projections_df, game_date):
