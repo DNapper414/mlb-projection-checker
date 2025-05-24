@@ -1,6 +1,6 @@
 import streamlit as st
 
-# Must be first Streamlit call
+# Must be first
 st.set_page_config(page_title="Bet Tracker by Apprentice Ent. Sports Picks", layout="centered")
 
 from streamlit_autorefresh import st_autorefresh
@@ -23,10 +23,10 @@ from supabase_client import (
     clear_projections
 )
 
-# --- Auto-refresh every 20 seconds ---
+# --- Auto-refresh every 20s ---
 st_autorefresh(interval=20000, key="auto_refresh")
 
-# --- Persistent session_id using query params ---
+# --- Session ID persistence ---
 if "session_id" in st.query_params:
     session_id = st.query_params["session_id"]
 else:
@@ -34,41 +34,39 @@ else:
     st.query_params["session_id"] = session_id
 st.session_state.session_id = session_id
 
-# --- Persistent sport selection using query params ---
+# --- Sport switch ---
 default_sport = st.query_params.get("sport", "MLB")
 sport = st.radio("Select Sport", ["MLB", "NBA"], index=0 if default_sport == "MLB" else 1)
 if st.query_params.get("sport") != sport:
     st.query_params["sport"] = sport
 
-# --- UI Layout ---
+# --- UI Controls ---
 st.title("🏀⚾ Bet Tracker by Apprentice Ent. Sports Picks")
 game_date = st.date_input("📅 Choose Game Date", value=datetime.today())
 st.subheader(f"➕ Add {sport} Player Projection")
 
-# --- Autocomplete Players ---
+# --- Autocomplete players ---
 players = []
 if sport == "NBA":
     try:
         players = get_nba_players_today(game_date.strftime("%Y-%m-%d"))
     except Exception:
-        st.warning("⚠️ Could not load NBA player names. Use manual entry.")
+        st.warning("⚠️ Could not load NBA players.")
 elif sport == "MLB":
     try:
         players = get_mlb_players_today(game_date.strftime("%Y-%m-%d"))
     except Exception:
-        st.warning("⚠️ Could not load MLB player names. Use manual entry.")
+        st.warning("⚠️ Could not load MLB players.")
 
 player = st.selectbox("Player Name", players) if players else st.text_input("Player Name")
-
 metric = st.selectbox(
     "Metric",
-    ["points", "assists", "rebounds", "steals", "blocks", "3pts made", "PRA"]
-    if sport == "NBA"
-    else ["hits", "homeRuns", "totalBases", "rbi", "baseOnBalls", "runs", "stolenBases"]
+    ["points", "assists", "rebounds", "steals", "blocks", "3pts made", "PRA"] if sport == "NBA" else
+    ["hits", "homeRuns", "totalBases", "rbi", "baseOnBalls", "runs", "stolenBases"]
 )
 target = st.number_input("Target Value", min_value=0, value=1)
 
-# --- Add Projection ---
+# --- Add projection ---
 if st.button("➕ Add to Table") and player:
     add_projection({
         "sport": sport,
@@ -79,26 +77,22 @@ if st.button("➕ Add to Table") and player:
         "actual": None,
         "session_id": session_id
     })
-    st.success(f"Projection added for {player}")
+    st.success(f"Added projection for {player}")
 
-# --- Load & Filter Projections ---
+# --- Get Projections ---
 response = get_projections(session_id)
-filtered_projections = [
-    p for p in response.data
-    if p["sport"] == sport and p["date"] == game_date.strftime("%Y-%m-%d")
-]
+filtered = [p for p in response.data if p["sport"] == sport and p["date"] == game_date.strftime("%Y-%m-%d")]
 
-if filtered_projections:
-    st.subheader("📊 Projection Results")
-    df = pd.DataFrame(filtered_projections)
+if filtered:
+    st.subheader("📊 Projections")
+    df = pd.DataFrame(filtered)
 
-    # --- Evaluate Projections ---
+    # --- Evaluate ---
     if sport == "MLB":
         schedule_url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={game_date.strftime('%Y-%m-%d')}"
-        resp = requests.get(schedule_url).json()
         game_ids = [
             str(game["gamePk"])
-            for d in resp.get("dates", [])
+            for d in requests.get(schedule_url).json().get("dates", [])
             for game in d.get("games", [])
             if game.get("status", {}).get("abstractGameState") in ["Final", "Live", "In Progress"]
         ]
@@ -109,32 +103,41 @@ if filtered_projections:
 
     results_df = pd.DataFrame(results)
 
-    # --- Responsive HTML Table Layout (forces horizontal rows)
+    # --- Render HTML Table ---
     table_html = """
     <style>
-    .scrollable-table {
-        overflow-x: auto;
-        background-color: #222;
-        color: #eee;
-        padding: 10px;
-    }
     table {
         width: 100%;
         border-collapse: collapse;
         font-size: 14px;
-        min-width: 600px;
+        background-color: #222;
+        color: #eee;
     }
     th, td {
+        padding: 6px 8px;
         border: 1px solid #444;
-        padding: 8px 10px;
         text-align: left;
     }
     th {
         background-color: #333;
         color: #fff;
     }
+    .trash {
+        font-size: 16px;
+        text-align: center;
+    }
+    @media (max-width: 600px) {
+        table {
+            font-size: 12px;
+        }
+        th, td {
+            padding: 4px 5px;
+        }
+        .trash {
+            font-size: 14px;
+        }
+    }
     </style>
-    <div class="scrollable-table">
     <table>
         <thead>
             <tr>
@@ -143,41 +146,45 @@ if filtered_projections:
                 <th>Target</th>
                 <th>Actual</th>
                 <th>Met?</th>
+                <th>Remove Player</th>
             </tr>
         </thead>
         <tbody>
     """
 
-    for _, row in results_df.iterrows():
+    for i, row in results_df.iterrows():
         met_icon = "✅" if row["✅ Met?"] else "❌"
         table_html += f"""
         <tr>
-            <td>{row['Player']}</td>
-            <td>{row['Metric']}</td>
-            <td>{row['Target']}</td>
-            <td>{row['Actual']}</td>
+            <td>{row["Player"]}</td>
+            <td>{row["Metric"]}</td>
+            <td>{row["Target"]}</td>
+            <td>{row["Actual"]}</td>
             <td>{met_icon}</td>
+            <td class="trash">[REMOVE_{i}]</td>
         </tr>
         """
 
-    table_html += "</tbody></table></div>"
+    table_html += "</tbody></table>"
 
-    html(table_html, height=400, scrolling=True)
+    # Render table with placeholders for buttons
+    html_block = table_html
+    html(html_block.replace("[REMOVE_", ""), height=500, scrolling=False)
 
-    # --- Remove Buttons Matching Each Row
-    st.markdown("### ❌ Tap to Remove Player")
+    # --- Replace placeholders with working Streamlit buttons
     for i, row in results_df.iterrows():
-        if st.button(f"Remove: {row['Player']} - {row['Metric']}", key=f"remove_{i}"):
+        if st.button("❌", key=f"remove_{i}"):
             remove_projection(df.iloc[i]["id"], session_id)
             st.rerun()
 
-    # --- Export + Clear
+    # --- Download and Clear
     st.markdown("### 📥 Export & Cleanup")
     csv = results_df.to_csv(index=False).encode("utf-8")
-    st.download_button("📥 Download Results CSV", csv, file_name="bet_results.csv")
+    st.download_button("📥 Download CSV", csv, file_name="projections.csv")
 
     if st.button("🧹 Clear All Projections"):
         clear_projections(session_id)
         st.rerun()
+
 else:
-    st.info("No projections for this date. Add one above or select a different date.")
+    st.info("No projections yet. Add one above.")
