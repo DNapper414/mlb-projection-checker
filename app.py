@@ -4,7 +4,6 @@ import streamlit as st
 st.set_page_config(page_title="Bet Tracker by Apprentice Ent. Sports Picks", layout="centered")
 
 from streamlit_autorefresh import st_autorefresh
-from streamlit.components.v1 import html
 import pandas as pd
 import requests
 import uuid
@@ -109,62 +108,24 @@ if filtered_projections:
 
     results_df = pd.DataFrame(results)
 
-    # --- Responsive Table with Fixed Font Colors for Dark Mode ---
-    table_html = """
-    <style>
-        .responsive-table {
-            width: 100%;
-            overflow-x: auto;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 14px;
-            background-color: #222;
-            color: #eee;
-        }
-        th, td {
-            padding: 8px 10px;
-            border: 1px solid #444;
-            text-align: left;
-        }
-        th {
-            background-color: #333;
-            color: #fff;
-        }
-    </style>
-    <div class="responsive-table">
-        <table>
-            <thead>
-                <tr>
-                    <th>Player</th>
-                    <th>Metric</th>
-                    <th>Target</th>
-                    <th>Actual</th>
-                    <th>Met?</th>
-                </tr>
-            </thead>
-            <tbody>
-    """
+    # --- Table Headers Using Streamlit Columns ---
+    st.markdown("### 🧾 Projection Results")
+    headers = st.columns([2, 2, 1, 1, 1, 1])
+    headers[0].markdown("**Player**")
+    headers[1].markdown("**Metric**")
+    headers[2].markdown("**Target**")
+    headers[3].markdown("**Actual**")
+    headers[4].markdown("**Met?**")
+    headers[5].markdown("**Remove Player**")
 
-    for _, row in results_df.iterrows():
-        table_html += f"""
-        <tr>
-            <td>{row["Player"]}</td>
-            <td>{row["Metric"]}</td>
-            <td>{row["Target"]}</td>
-            <td>{row["Actual"]}</td>
-            <td>{'✅' if row["✅ Met?"] else '❌'}</td>
-        </tr>
-        """
-
-    table_html += "</tbody></table></div>"
-    html(table_html, height=400, scrolling=True)
-
-    # --- Native Streamlit Buttons Below Table ---
-    st.markdown("### ❌ Remove Individual Projections")
     for i, row in results_df.iterrows():
-        if st.button(f"Remove: {row['Player']} - {row['Metric']}", key=f"remove_{i}"):
+        cols = st.columns([2, 2, 1, 1, 1, 1])
+        cols[0].markdown(row["Player"])
+        cols[1].markdown(row["Metric"])
+        cols[2].markdown(str(row["Target"]))
+        cols[3].markdown(str(row["Actual"]))
+        cols[4].markdown("✅" if row["✅ Met?"] else "❌")
+        if cols[5].button("❌", key=f"remove_{i}"):
             remove_projection(df.iloc[i]["id"], session_id)
             st.rerun()
 
