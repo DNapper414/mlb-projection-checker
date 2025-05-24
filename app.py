@@ -7,7 +7,7 @@ from streamlit_autorefresh import st_autorefresh
 import pandas as pd
 import requests
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime
 from utils import (
     fetch_boxscore,
     evaluate_projections,
@@ -107,23 +107,69 @@ if filtered_projections:
 
     results_df = pd.DataFrame(results)
 
-    # --- Render Results Table ---
-    header = st.columns(6)
-    header[0].markdown("**Player**")
-    header[1].markdown("**Metric**")
-    header[2].markdown("**Target**")
-    header[3].markdown("**Actual**")
-    header[4].markdown("**Met?**")
-    header[5].markdown("**🗑 Remove**")
+    # --- Render Responsive Table ---
+    table_html = """
+    <style>
+        .responsive-table {
+            width: 100%;
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        th, td {
+            padding: 8px 10px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+        th {
+            background-color: #f0f2f6;
+        }
+        td.action {
+            text-align: center;
+        }
+    </style>
+    <div class="responsive-table">
+        <table>
+            <thead>
+                <tr>
+                    <th>Player</th>
+                    <th>Metric</th>
+                    <th>Target</th>
+                    <th>Actual</th>
+                    <th>Met?</th>
+                    <th>Remove</th>
+                </tr>
+            </thead>
+            <tbody>
+    """
 
     for i, row in results_df.iterrows():
-        cols = st.columns(6)
-        cols[0].markdown(row["Player"])
-        cols[1].markdown(row["Metric"])
-        cols[2].markdown(f"{row['Target']}")
-        cols[3].markdown(f"{row['Actual']}")
-        cols[4].markdown("✅" if row["✅ Met?"] else "❌")
-        if cols[5].button("❌", key=f"remove_{i}"):
+        remove_button = f"""
+        <form action="" method="post">
+            <input type="hidden" name="remove_id" value="{df.iloc[i]['id']}">
+            <button type="submit">❌</button>
+        </form>
+        """
+        table_html += f"""
+        <tr>
+            <td>{row["Player"]}</td>
+            <td>{row["Metric"]}</td>
+            <td>{row["Target"]}</td>
+            <td>{row["Actual"]}</td>
+            <td>{'✅' if row["✅ Met?"] else '❌'}</td>
+            <td class="action">{remove_button}</td>
+        </tr>
+        """
+
+    table_html += "</tbody></table></div>"
+    st.markdown(table_html, unsafe_allow_html=True)
+
+    # --- Manual Remove Buttons (Streamlit can't process HTML form submits) ---
+    for i, row in results_df.iterrows():
+        if st.button("❌ Remove", key=f"remove_{i}"):
             remove_projection(df.iloc[i]["id"], session_id)
             st.rerun()
 
