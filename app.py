@@ -3,6 +3,7 @@ import streamlit as st
 # Must be first Streamlit call
 st.set_page_config(page_title="Bet Tracker by Apprentice Ent. Sports Picks", layout="centered")
 
+from streamlit_autorefresh import st_autorefresh
 import pandas as pd
 import requests
 import uuid
@@ -20,6 +21,9 @@ from supabase_client import (
     remove_projection,
     clear_projections
 )
+
+# --- Auto-refresh every 20 seconds ---
+st_autorefresh(interval=20000, key="auto_refresh")  # 20 seconds = 20000 ms
 
 # --- Persistent session_id using query params ---
 if "session_id" in st.query_params:
