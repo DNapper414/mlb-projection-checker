@@ -19,11 +19,11 @@ from supabase_client import (
     clear_projections
 )
 
-# Page and refresh setup
+# --- Setup ---
 st.set_page_config(page_title="Bet Tracker | Apprentice Ent.", layout="centered")
 st_autorefresh(interval=60000, key="auto_refresh")
 
-# Session tracking
+# --- Session ---
 if "session_id" in st.query_params:
     session_id = st.query_params["session_id"]
 else:
@@ -31,16 +31,17 @@ else:
     st.query_params["session_id"] = session_id
 st.session_state.session_id = session_id
 
-# Sport selector
+# --- Sport selector ---
 default_sport = st.query_params.get("sport", "MLB")
 sport = st.radio("Select Sport", ["MLB", "NBA"], index=0 if default_sport == "MLB" else 1)
 if st.query_params.get("sport") != sport:
     st.query_params["sport"] = sport
 
-# 2026 UI styling
+# --- Styling ---
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Satisfaction&display=swap');
 
 html, body, [class*="css"] {
     font-family: 'Inter', sans-serif;
@@ -48,9 +49,10 @@ html, body, [class*="css"] {
     color: #f8f8f8;
 }
 
-h1, h2, h3 {
-    color: #00ffe1;
-    text-shadow: 0 0 6px #00ffe1;
+h1 span.satisfaction {
+    font-family: 'Satisfaction', cursive;
+    font-size: 2rem;
+    color: #fff;
 }
 
 .card {
@@ -94,7 +96,7 @@ th, td {
 }
 
 td {
-    color: #f8f8f8;
+    color: #f0f0f0;  /* ✅ High contrast */
     background-color: rgba(255, 255, 255, 0.02);
 }
 
@@ -125,9 +127,9 @@ tr:hover {
 </style>
 """, unsafe_allow_html=True)
 
-# --- Input UI ---
+# --- Layout: Input ---
 st.markdown('<div class="card">', unsafe_allow_html=True)
-st.title("🏆 Bet Tracker by Apprentice Ent.")
+st.markdown("## 🏆 Bet Tracker by <span class='satisfaction'>Apprentice Ent.</span>", unsafe_allow_html=True)
 game_date = st.date_input("📅 Game Date", value=datetime.today())
 st.subheader(f"➕ Add {sport} Player Projection")
 
@@ -136,18 +138,18 @@ if sport == "NBA":
     try:
         players = get_nba_players_today(game_date.strftime("%Y-%m-%d"))
     except:
-        st.warning("NBA player list not loaded.")
+        st.warning("Could not load NBA players.")
 elif sport == "MLB":
     try:
         players = get_mlb_players_today(game_date.strftime("%Y-%m-%d"))
     except:
-        st.warning("MLB player list not loaded.")
+        st.warning("Could not load MLB players.")
 
 player = st.selectbox("Player Name", players) if players else st.text_input("Player Name")
 metric = st.selectbox(
     "Metric",
-    ["points", "assists", "rebounds", "steals", "blocks", "3pts made", "PRA"] if sport == "NBA" else
-    ["hits", "homeRuns", "totalBases", "rbi", "baseOnBalls", "runs", "stolenBases"]
+    ["points", "assists", "rebounds", "steals", "blocks", "3pts made", "PRA"] if sport == "NBA"
+    else ["hits", "homeRuns", "totalBases", "rbi", "baseOnBalls", "runs", "stolenBases"]
 )
 target = st.number_input("Target", min_value=0, value=1)
 
@@ -161,22 +163,21 @@ if st.button("➕ Add to Table") and player:
         "actual": None,
         "session_id": session_id
     })
-    st.success(f"Projection added for {player}")
+    st.success(f"Added projection for {player}")
 st.markdown('</div>', unsafe_allow_html=True)
 
-# --- Data Loading & Display ---
+# --- Load projections ---
 response = get_projections(session_id)
 filtered = [p for p in response.data if p["sport"] == sport and p["date"] == game_date.strftime("%Y-%m-%d")]
 
 if filtered:
     df = pd.DataFrame(filtered)
 
-    # Evaluate
     if sport == "MLB":
-        url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={game_date.strftime('%Y-%m-%d')}"
+        schedule_url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={game_date.strftime('%Y-%m-%d')}"
         game_ids = [
             str(game["gamePk"])
-            for d in requests.get(url).json().get("dates", [])
+            for d in requests.get(schedule_url).json().get("dates", [])
             for game in d.get("games", [])
             if game.get("status", {}).get("abstractGameState") in ["Final", "Live", "In Progress"]
         ]
@@ -187,10 +188,10 @@ if filtered:
 
     results_df = pd.DataFrame(results)
 
+    # --- Results Card ---
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.subheader("📊 Projection Results")
 
-    # Render HTML Table
     table_html = """
     <table>
         <thead>
@@ -222,7 +223,7 @@ if filtered:
     html(table_html, height=520, scrolling=False)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # --- Export + Cleanup ---
+    # --- Export & Cleanup ---
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.subheader("📥 Export & Cleanup")
     csv = results_df.to_csv(index=False).encode("utf-8")
@@ -232,6 +233,5 @@ if filtered:
         clear_projections(session_id)
         st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
-
 else:
     st.info("No projections yet for this date.")
