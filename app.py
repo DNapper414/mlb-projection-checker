@@ -4,6 +4,7 @@ import streamlit as st
 st.set_page_config(page_title="Bet Tracker by Apprentice Ent. Sports Picks", layout="centered")
 
 from streamlit_autorefresh import st_autorefresh
+from streamlit.components.v1 import html
 import pandas as pd
 import requests
 import uuid
@@ -88,7 +89,7 @@ filtered_projections = [
 ]
 
 if filtered_projections:
-    st.subheader("📊 Results")
+    st.subheader("📊 Projection Results")
     df = pd.DataFrame(filtered_projections)
 
     # --- Evaluate Projections ---
@@ -108,28 +109,69 @@ if filtered_projections:
 
     results_df = pd.DataFrame(results)
 
-    # --- Table Headers Using Streamlit Columns ---
-    st.markdown("### 🧾 Projection Results")
-    headers = st.columns([2, 2, 1, 1, 1, 1])
-    headers[0].markdown("**Player**")
-    headers[1].markdown("**Metric**")
-    headers[2].markdown("**Target**")
-    headers[3].markdown("**Actual**")
-    headers[4].markdown("**Met?**")
-    headers[5].markdown("**Remove Player**")
+    # --- Responsive HTML Table Layout (forces horizontal rows)
+    table_html = """
+    <style>
+    .scrollable-table {
+        overflow-x: auto;
+        background-color: #222;
+        color: #eee;
+        padding: 10px;
+    }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+        min-width: 600px;
+    }
+    th, td {
+        border: 1px solid #444;
+        padding: 8px 10px;
+        text-align: left;
+    }
+    th {
+        background-color: #333;
+        color: #fff;
+    }
+    </style>
+    <div class="scrollable-table">
+    <table>
+        <thead>
+            <tr>
+                <th>Player</th>
+                <th>Metric</th>
+                <th>Target</th>
+                <th>Actual</th>
+                <th>Met?</th>
+            </tr>
+        </thead>
+        <tbody>
+    """
 
+    for _, row in results_df.iterrows():
+        met_icon = "✅" if row["✅ Met?"] else "❌"
+        table_html += f"""
+        <tr>
+            <td>{row['Player']}</td>
+            <td>{row['Metric']}</td>
+            <td>{row['Target']}</td>
+            <td>{row['Actual']}</td>
+            <td>{met_icon}</td>
+        </tr>
+        """
+
+    table_html += "</tbody></table></div>"
+
+    html(table_html, height=400, scrolling=True)
+
+    # --- Remove Buttons Matching Each Row
+    st.markdown("### ❌ Tap to Remove Player")
     for i, row in results_df.iterrows():
-        cols = st.columns([2, 2, 1, 1, 1, 1])
-        cols[0].markdown(row["Player"])
-        cols[1].markdown(row["Metric"])
-        cols[2].markdown(str(row["Target"]))
-        cols[3].markdown(str(row["Actual"]))
-        cols[4].markdown("✅" if row["✅ Met?"] else "❌")
-        if cols[5].button("❌", key=f"remove_{i}"):
+        if st.button(f"Remove: {row['Player']} - {row['Metric']}", key=f"remove_{i}"):
             remove_projection(df.iloc[i]["id"], session_id)
             st.rerun()
 
-    # --- Download / Clear All ---
+    # --- Export + Clear
     st.markdown("### 📥 Export & Cleanup")
     csv = results_df.to_csv(index=False).encode("utf-8")
     st.download_button("📥 Download Results CSV", csv, file_name="bet_results.csv")
