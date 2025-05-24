@@ -3,7 +3,6 @@ import pandas as pd
 import requests
 import uuid
 from datetime import datetime
-from streamlit_cookies_manager import EncryptedCookieManager
 from utils import (
     fetch_boxscore,
     evaluate_projections,
@@ -18,33 +17,26 @@ from supabase_client import (
     clear_projections
 )
 
-# Persistent session ID using cookies
-cookies = EncryptedCookieManager(
-    prefix="bet_tracker_",
-    password="replace-this-with-a-secret-passphrase"  # Replace with a secure passphrase in production
-)
-
-if not cookies.ready():
-    st.stop()
-
-# Load or create session_id
-session_id = cookies.get("session_id")
-if session_id is None:
+# Safe session ID using Streamlit's query parameters
+query_params = st.experimental_get_query_params()
+if "session_id" in query_params:
+    session_id = query_params["session_id"][0]
+else:
     session_id = str(uuid.uuid4())
-    cookies.set("session_id", session_id)
-    cookies.save()  # ✅ Required to persist the cookie
+    st.experimental_set_query_params(session_id=session_id)
 
 st.session_state.session_id = session_id
 
-# App UI
+# App config
 st.set_page_config(page_title="Bet Tracker by Apprentice Ent. Sports Picks", layout="centered")
 st.title("🏀⚾ Bet Tracker by Apprentice Ent. Sports Picks")
 
+# UI Inputs
 sport = st.radio("Select Sport", ["MLB", "NBA"])
 game_date = st.date_input("📅 Choose Game Date", value=datetime.today())
 st.subheader(f"➕ Add {sport} Player Projection")
 
-# Autocomplete player list
+# Autocomplete player names
 players = []
 if sport == "NBA":
     try:
@@ -67,6 +59,7 @@ metric = st.selectbox(
 )
 target = st.number_input("Target Value", min_value=0, value=1)
 
+# Add projection to Supabase
 if st.button("➕ Add to Table") and player:
     add_projection({
         "sport": sport,
@@ -79,7 +72,7 @@ if st.button("➕ Add to Table") and player:
     })
     st.success(f"Projection added for {player}")
 
-# Load projections from Supabase
+# Retrieve projections
 response = get_projections(session_id)
 projections = [p for p in response.data if p["sport"] == sport]
 
@@ -87,7 +80,7 @@ if projections:
     st.subheader("📊 Results")
     df = pd.DataFrame(projections)
 
-    # Evaluate projections
+    # Evaluate based on sport
     if sport == "MLB":
         schedule_url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={game_date.strftime('%Y-%m-%d')}"
         resp = requests.get(schedule_url).json()
@@ -104,7 +97,7 @@ if projections:
 
     results_df = pd.DataFrame(results)
 
-    # Display results
+    # Render table
     header = st.columns(6)
     header[0].markdown("**Player**")
     header[1].markdown("**Metric**")
@@ -124,7 +117,7 @@ if projections:
             remove_projection(df.iloc[i]["id"], session_id)
             st.rerun()
 
-    # Download and clear
+    # Download + clear
     csv = results_df.to_csv(index=False).encode("utf-8")
     st.download_button("📥 Download Results CSV", csv, file_name="bet_results.csv")
 

@@ -3,4 +3,3 @@ pandas
 requests
 nba_api
 supabase
-streamlit-cookies-manager
