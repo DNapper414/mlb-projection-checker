@@ -4,7 +4,7 @@ import streamlit as st
 st.set_page_config(page_title="Bet Tracker by Apprentice Ent. Sports Picks", layout="centered")
 
 from streamlit_autorefresh import st_autorefresh
-from streamlit.components.v1 import html  # ✅ Use HTML renderer
+from streamlit.components.v1 import html
 import pandas as pd
 import requests
 import uuid
@@ -109,7 +109,7 @@ if filtered_projections:
 
     results_df = pd.DataFrame(results)
 
-    # --- Render Table via HTML Component ---
+    # --- Responsive HTML Table (Dark-mode friendly) ---
     table_html = """
     <style>
         .responsive-table {
@@ -120,14 +120,16 @@ if filtered_projections:
             width: 100%;
             border-collapse: collapse;
             font-size: 14px;
+            color: inherit;  /* ✅ Works in dark/light mode */
         }
         th, td {
             padding: 8px 10px;
-            border: 1px solid #ddd;
+            border: 1px solid #444;
             text-align: left;
         }
         th {
-            background-color: #f0f2f6;
+            background-color: #333;
+            color: #fff;
         }
     </style>
     <div class="responsive-table">
@@ -156,17 +158,17 @@ if filtered_projections:
         """
 
     table_html += "</tbody></table></div>"
+    html(table_html, height=400, scrolling=True)
 
-    # ✅ FIX: render HTML properly
-    html(table_html, height=500, scrolling=True)
-
-    # --- Native Streamlit Remove Buttons ---
+    # --- Native Streamlit Buttons Below Table ---
+    st.markdown("### ❌ Remove Individual Projections")
     for i, row in results_df.iterrows():
-        if st.button("❌ Remove", key=f"remove_{i}"):
+        if st.button(f"Remove: {row['Player']} - {row['Metric']}", key=f"remove_{i}"):
             remove_projection(df.iloc[i]["id"], session_id)
             st.rerun()
 
-    # --- Download / Clear ---
+    # --- Download / Clear All ---
+    st.markdown("### 📥 Export & Cleanup")
     csv = results_df.to_csv(index=False).encode("utf-8")
     st.download_button("📥 Download Results CSV", csv, file_name="bet_results.csv")
 
