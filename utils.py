@@ -1,4 +1,7 @@
 import requests
+from datetime import datetime
+import time
+from nba_api.stats.endpoints import scoreboardv2, boxscoretraditionalv2
 
 # -------------------------------
 # MLB FUNCTIONS
@@ -44,52 +47,29 @@ def evaluate_projections(projections_df, boxscores):
     return results
 
 # -------------------------------
-# NBA FUNCTIONS (RapidAPI V2)
+# NBA FUNCTIONS (nba_api)
 # -------------------------------
 
-RAPIDAPI_KEY = "47945fd24fmsh2539580c53289bdp119b7bjsne5525ec5acdf"
-RAPIDAPI_HOST = "api-nba-v1.p.rapidapi.com"
-HEADERS = {
-    "X-RapidAPI-Key": RAPIDAPI_KEY,
-    "X-RapidAPI-Host": RAPIDAPI_HOST,
-}
-
-def get_nba_players_from_games(date_str):
-    """Collect all NBA player names from all boxscores on given date"""
-    games_url = f"https://api-nba-v1.p.rapidapi.com/games?date={date_str}"
-    games_resp = requests.get(games_url, headers=HEADERS)
-    games_data = games_resp.json().get("response", [])
+def get_nba_players_today(date_str):
+    """Return all player names from all games played on a given date."""
+    date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+    scoreboard = scoreboardv2.ScoreboardV2(game_date=date_obj.strftime("%m/%d/%Y"), league_id="00")
+    game_ids = scoreboard.game_header.get_data_frame()["GAME_ID"].tolist()
     all_players = set()
 
-    for game in games_data:
-        game_id = game.get("id")
-        stats_url = f"https://api-nba-v1.p.rapidapi.com/players/statistics?game={game_id}"
-        stats_resp = requests.get(stats_url, headers=HEADERS)
-        stats_data = stats_resp.json().get("response", [])
-        for s in stats_data:
-            name = f"{s['player']['firstname']} {s['player']['lastname']}".strip()
+    for gid in game_ids:
+        time.sleep(0.6)
+        box = boxscoretraditionalv2.BoxScoreTraditionalV2(game_id=gid)
+        df = box.player_stats.get_data_frame()
+        for name in df["PLAYER_NAME"]:
             all_players.add(name)
 
     return sorted(all_players)
 
-def fetch_boxscore_nba(date_str):
-    """Return all player boxscore stats for every NBA game on the date"""
-    games_url = f"https://api-nba-v1.p.rapidapi.com/games?date={date_str}"
-    games_resp = requests.get(games_url, headers=HEADERS)
-    games_data = games_resp.json().get("response", [])
-    all_stats = []
-
-    for game in games_data:
-        game_id = game.get("id")
-        stats_url = f"https://api-nba-v1.p.rapidapi.com/players/statistics?game={game_id}"
-        stats_resp = requests.get(stats_url, headers=HEADERS)
-        stats_data = stats_resp.json().get("response", [])
-        all_stats.extend(stats_data)
-
-    return all_stats
-
-def evaluate_projections_nba(projections_df, game_date):
-    boxscores = fetch_boxscore_nba(game_date)
+def evaluate_projections_nba_nbaapi(projections_df, date_str):
+    date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+    scoreboard = scoreboardv2.ScoreboardV2(game_date=date_obj.strftime("%m/%d/%Y"), league_id="00")
+    game_ids = scoreboard.game_header.get_data_frame()["GAME_ID"].tolist()
     results = []
 
     for _, row in projections_df.iterrows():
@@ -99,19 +79,30 @@ def evaluate_projections_nba(projections_df, game_date):
         actual = 0
         found = False
 
-        for stat in boxscores:
-            player = stat.get("player", {})
-            stats = stat.get("statistics", {})
-            full_name = f"{player.get('firstname', '')} {player.get('lastname', '')}".strip().lower()
-
-            if input_name in full_name or full_name in input_name:
-                found = True
-                if metric == "PRA":
-                    actual = stats.get("points", 0) + stats.get("assists", 0) + stats.get("rebounds", 0)
-                elif metric == "3pts made":
-                    actual = stats.get("tpm", 0)
-                else:
-                    actual = stats.get(metric, 0)
+        for gid in game_ids:
+            time.sleep(0.6)
+            box = boxscoretraditionalv2.BoxScoreTraditionalV2(game_id=gid)
+            df = box.player_stats.get_data_frame()
+            for _, player_row in df.iterrows():
+                player_name = player_row["PLAYER_NAME"].strip().lower()
+                if input_name in player_name or player_name in input_name:
+                    found = True
+                    if metric == "PRA":
+                        actual = player_row["PTS"] + player_row["REB"] + player_row["AST"]
+                    elif metric == "3pts made":
+                        actual = player_row["FG3M"]
+                    elif metric == "points":
+                        actual = player_row["PTS"]
+                    elif metric == "rebounds":
+                        actual = player_row["REB"]
+                    elif metric == "assists":
+                        actual = player_row["AST"]
+                    elif metric == "steals":
+                        actual = player_row["STL"]
+                    elif metric == "blocks":
+                        actual = player_row["BLK"]
+                    break
+            if found:
                 break
 
         results.append({
