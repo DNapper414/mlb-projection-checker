@@ -37,7 +37,7 @@ sport = st.radio("Select Sport", ["MLB", "NBA"], index=0 if default_sport == "ML
 if st.query_params.get("sport") != sport:
     st.query_params["sport"] = sport
 
-# --- Styles with Adaptive Font Color ---
+# --- Styles: Forcing white font in table ---
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
@@ -78,7 +78,7 @@ button:hover {
     box-shadow: 0 0 16px #00ffe1;
 }
 
-/* Table Styles */
+/* Table Styling */
 table {
     width: 100%;
     border-collapse: collapse;
@@ -96,16 +96,12 @@ th, td {
 
 td {
     background-color: rgba(255, 255, 255, 0.04);
+    color: #ffffff !important; /* ✅ Always visible on dark */
 }
 
-/* Adaptive font color */
-@media (prefers-color-scheme: dark) {
-    td { color: #ffffff; }
-    th { color: #00ffe1; background-color: rgba(0, 0, 0, 0.6); }
-}
-@media (prefers-color-scheme: light) {
-    td { color: #000000; }
-    th { color: #007777; background-color: #eeeeee; }
+th {
+    background-color: rgba(0, 0, 0, 0.6);
+    color: #00ffe1;
 }
 
 tr:hover {
@@ -129,7 +125,7 @@ tr:hover {
 </style>
 """, unsafe_allow_html=True)
 
-# --- UI Inputs ---
+# --- Layout UI ---
 st.markdown('<div class="card">', unsafe_allow_html=True)
 st.markdown("## 🏆 Bet Tracker by <span class='satisfaction'>Apprentice Ent.</span>", unsafe_allow_html=True)
 game_date = st.date_input("📅 Game Date", value=datetime.today())
@@ -165,16 +161,17 @@ if st.button("➕ Add to Table") and player:
         "actual": None,
         "session_id": session_id
     })
-    st.success(f"Added projection for {player}")
+    st.success(f"Projection added for {player}")
 st.markdown('</div>', unsafe_allow_html=True)
 
-# --- Load Data ---
+# --- Load Projections ---
 response = get_projections(session_id)
 filtered = [p for p in response.data if p["sport"] == sport and p["date"] == game_date.strftime("%Y-%m-%d")]
 
 if filtered:
     df = pd.DataFrame(filtered)
 
+    # Evaluate
     if sport == "MLB":
         url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={game_date.strftime('%Y-%m-%d')}"
         game_ids = [
@@ -190,7 +187,7 @@ if filtered:
 
     results_df = pd.DataFrame(results)
 
-    # --- Display Table ---
+    # --- Results Table ---
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.subheader("📊 Projection Results")
 
