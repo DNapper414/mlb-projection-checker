@@ -27,9 +27,10 @@ def evaluate_projections(projections_df, boxscores):
                 for pdata in players.values():
                     full_name = pdata["person"]["fullName"].strip().lower()
                     if full_name == player_name:
-                        stats = pdata.get("stats", {}).get("batting", {})
-                        if stats:
-                            actual = stats.get(metric, 0)
+                        stats = pdata.get("stats", {})
+                        batting = stats.get("batting", {})
+                        if metric in batting:
+                            actual = batting[metric]
                             found = True
                             break
                 if found:
