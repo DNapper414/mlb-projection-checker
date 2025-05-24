@@ -19,11 +19,11 @@ from supabase_client import (
     clear_projections
 )
 
-# --- Page setup ---
+# Page and refresh setup
 st.set_page_config(page_title="Bet Tracker | Apprentice Ent.", layout="centered")
 st_autorefresh(interval=60000, key="auto_refresh")
 
-# --- Session handling ---
+# Session tracking
 if "session_id" in st.query_params:
     session_id = st.query_params["session_id"]
 else:
@@ -31,13 +31,13 @@ else:
     st.query_params["session_id"] = session_id
 st.session_state.session_id = session_id
 
-# --- Sport selector ---
+# Sport selector
 default_sport = st.query_params.get("sport", "MLB")
 sport = st.radio("Select Sport", ["MLB", "NBA"], index=0 if default_sport == "MLB" else 1)
 if st.query_params.get("sport") != sport:
     st.query_params["sport"] = sport
 
-# --- Inject Modern Styling ---
+# 2026 UI styling
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
@@ -51,10 +51,6 @@ html, body, [class*="css"] {
 h1, h2, h3 {
     color: #00ffe1;
     text-shadow: 0 0 6px #00ffe1;
-}
-
-.reportview-container {
-    background-color: transparent;
 }
 
 .card {
@@ -84,17 +80,22 @@ button:hover {
 table {
     width: 100%;
     border-collapse: collapse;
-    background-color: rgba(0, 0, 0, 0.2);
+    background-color: rgba(0, 0, 0, 0.3);
     border-radius: 12px;
     overflow: hidden;
-    color: #fff;
     font-size: 14px;
+    color: #f8f8f8;
 }
 
 th, td {
     padding: 12px;
-    border: 1px solid #333;
+    border: 1px solid #444;
     text-align: left;
+}
+
+td {
+    color: #f8f8f8;
+    background-color: rgba(255, 255, 255, 0.02);
 }
 
 th {
@@ -103,13 +104,14 @@ th {
 }
 
 tr:hover {
-    background-color: rgba(255,255,255,0.06);
+    background-color: rgba(255, 255, 255, 0.08);
 }
 
 .trash {
     text-align: center;
     font-size: 20px;
     cursor: not-allowed;
+    color: #ccc;
 }
 
 @media (max-width: 600px) {
@@ -123,7 +125,7 @@ tr:hover {
 </style>
 """, unsafe_allow_html=True)
 
-# --- UI layout ---
+# --- Input UI ---
 st.markdown('<div class="card">', unsafe_allow_html=True)
 st.title("🏆 Bet Tracker by Apprentice Ent.")
 game_date = st.date_input("📅 Game Date", value=datetime.today())
@@ -134,12 +136,12 @@ if sport == "NBA":
     try:
         players = get_nba_players_today(game_date.strftime("%Y-%m-%d"))
     except:
-        st.warning("NBA players not loaded.")
+        st.warning("NBA player list not loaded.")
 elif sport == "MLB":
     try:
         players = get_mlb_players_today(game_date.strftime("%Y-%m-%d"))
     except:
-        st.warning("MLB players not loaded.")
+        st.warning("MLB player list not loaded.")
 
 player = st.selectbox("Player Name", players) if players else st.text_input("Player Name")
 metric = st.selectbox(
@@ -159,25 +161,26 @@ if st.button("➕ Add to Table") and player:
         "actual": None,
         "session_id": session_id
     })
-    st.success(f"Projection for {player} added.")
+    st.success(f"Projection added for {player}")
 st.markdown('</div>', unsafe_allow_html=True)
 
-# --- Load projections ---
+# --- Data Loading & Display ---
 response = get_projections(session_id)
-projections = [p for p in response.data if p["sport"] == sport and p["date"] == game_date.strftime("%Y-%m-%d")]
+filtered = [p for p in response.data if p["sport"] == sport and p["date"] == game_date.strftime("%Y-%m-%d")]
 
-if projections:
-    df = pd.DataFrame(projections)
+if filtered:
+    df = pd.DataFrame(filtered)
 
+    # Evaluate
     if sport == "MLB":
-        schedule_url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={game_date.strftime('%Y-%m-%d')}"
-        games = [
+        url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={game_date.strftime('%Y-%m-%d')}"
+        game_ids = [
             str(game["gamePk"])
-            for d in requests.get(schedule_url).json().get("dates", [])
+            for d in requests.get(url).json().get("dates", [])
             for game in d.get("games", [])
             if game.get("status", {}).get("abstractGameState") in ["Final", "Live", "In Progress"]
         ]
-        boxscores = [fetch_boxscore(gid) for gid in games]
+        boxscores = [fetch_boxscore(gid) for gid in game_ids]
         results = evaluate_projections(df, boxscores)
     else:
         results = evaluate_projections_nba_nbaapi(df, game_date.strftime("%Y-%m-%d"))
@@ -187,6 +190,7 @@ if projections:
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.subheader("📊 Projection Results")
 
+    # Render HTML Table
     table_html = """
     <table>
         <thead>
@@ -202,14 +206,14 @@ if projections:
         <tbody>
     """
     for _, row in results_df.iterrows():
-        met = "✅" if row["✅ Met?"] else "❌"
+        met_icon = "✅" if row["✅ Met?"] else "❌"
         table_html += f"""
         <tr>
             <td>{row['Player']}</td>
             <td>{row['Metric']}</td>
             <td>{row['Target']}</td>
             <td>{row['Actual']}</td>
-            <td>{met}</td>
+            <td>{met_icon}</td>
             <td class="trash">🗑️</td>
         </tr>
         """
@@ -228,5 +232,6 @@ if projections:
         clear_projections(session_id)
         st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
+
 else:
-    st.info("No projections added yet.")
+    st.info("No projections yet for this date.")
