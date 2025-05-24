@@ -61,7 +61,6 @@ HEADERS = {
 }
 
 def fetch_boxscore_nba(date_str):
-    # 1. Get games on this date
     games_url = f"https://api-nba-v1.p.rapidapi.com/games?date={date_str}"
     games_resp = requests.get(games_url, headers=HEADERS)
     games_data = games_resp.json().get("response", [])
@@ -82,6 +81,16 @@ def fetch_boxscore_nba(date_str):
 def evaluate_projections_nba(projections_df, game_date):
     boxscores = fetch_boxscore_nba(game_date)
     results = []
+
+    if not boxscores:
+        print(f"❌ No NBA stats returned for {game_date}")
+        return [{
+            "Player": row["Player"],
+            "Metric": row["Metric"],
+            "Target": row["Target"],
+            "Actual": "N/A",
+            "✅ Met?": False
+        } for _, row in projections_df.iterrows()]
 
     for _, row in projections_df.iterrows():
         input_name = row["Player"].strip().lower()
@@ -105,7 +114,7 @@ def evaluate_projections_nba(projections_df, game_date):
                         stats.get("rebounds", 0)
                     )
                 elif metric == "3pts made":
-                    actual = stats.get("tpm", 0) or stats.get("threePointsMade", 0)  # fallback
+                    actual = stats.get("tpm", 0) or stats.get("threePointsMade", 0)
                 else:
                     metric_map = {
                         "points": "points",
@@ -114,9 +123,7 @@ def evaluate_projections_nba(projections_df, game_date):
                         "steals": "steals",
                         "blocks": "blocks"
                     }
-                    field = metric_map.get(metric, "")
-                    actual = stats.get(field, 0)
-
+                    actual = stats.get(metric_map.get(metric, ""), 0)
                 break
 
         results.append({
