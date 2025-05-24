@@ -23,7 +23,6 @@ from supabase_client import (
 st.set_page_config(page_title="Bet Tracker | Apprentice Ent.", layout="centered")
 st_autorefresh(interval=60000, key="auto_refresh")
 
-# --- Session ID ---
 if "session_id" in st.query_params:
     session_id = st.query_params["session_id"]
 else:
@@ -37,7 +36,7 @@ sport = st.radio("Select Sport", ["MLB", "NBA"], index=0 if default_sport == "ML
 if st.query_params.get("sport") != sport:
     st.query_params["sport"] = sport
 
-# --- Styles: Forcing white font in table ---
+# --- Theme-Aware Styles ---
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
@@ -78,11 +77,25 @@ button:hover {
     box-shadow: 0 0 16px #00ffe1;
 }
 
-/* Table Styling */
+/* Default table: Light mode */
+table, th, td {
+    background-color: #ffffff;
+    color: #000000;
+    border: 1px solid #ccc;
+}
+
+/* Override in dark mode */
+@media (prefers-color-scheme: dark) {
+    table, th, td {
+        background-color: #1a1a1a !important;
+        color: #ffffff !important;
+        border-color: #444;
+    }
+}
+
 table {
     width: 100%;
     border-collapse: collapse;
-    background-color: rgba(0, 0, 0, 0.3);
     border-radius: 12px;
     overflow: hidden;
     font-size: 14px;
@@ -90,18 +103,7 @@ table {
 
 th, td {
     padding: 12px;
-    border: 1px solid #444;
     text-align: left;
-}
-
-td {
-    background-color: rgba(255, 255, 255, 0.04);
-    color: #ffffff !important; /* ✅ Always visible on dark */
-}
-
-th {
-    background-color: rgba(0, 0, 0, 0.6);
-    color: #00ffe1;
 }
 
 tr:hover {
@@ -111,7 +113,7 @@ tr:hover {
 .trash {
     text-align: center;
     font-size: 20px;
-    color: #aaa;
+    color: #888;
 }
 
 @media (max-width: 600px) {
@@ -125,7 +127,7 @@ tr:hover {
 </style>
 """, unsafe_allow_html=True)
 
-# --- Layout UI ---
+# --- UI: Input Section ---
 st.markdown('<div class="card">', unsafe_allow_html=True)
 st.markdown("## 🏆 Bet Tracker by <span class='satisfaction'>Apprentice Ent.</span>", unsafe_allow_html=True)
 game_date = st.date_input("📅 Game Date", value=datetime.today())
@@ -136,12 +138,12 @@ if sport == "NBA":
     try:
         players = get_nba_players_today(game_date.strftime("%Y-%m-%d"))
     except:
-        st.warning("⚠️ NBA players unavailable.")
+        st.warning("⚠️ Could not load NBA players.")
 elif sport == "MLB":
     try:
         players = get_mlb_players_today(game_date.strftime("%Y-%m-%d"))
     except:
-        st.warning("⚠️ MLB players unavailable.")
+        st.warning("⚠️ Could not load MLB players.")
 
 player = st.selectbox("Player Name", players) if players else st.text_input("Player Name")
 metric = st.selectbox(
@@ -161,7 +163,7 @@ if st.button("➕ Add to Table") and player:
         "actual": None,
         "session_id": session_id
     })
-    st.success(f"Projection added for {player}")
+    st.success(f"Added projection for {player}")
 st.markdown('</div>', unsafe_allow_html=True)
 
 # --- Load Projections ---
@@ -171,7 +173,6 @@ filtered = [p for p in response.data if p["sport"] == sport and p["date"] == gam
 if filtered:
     df = pd.DataFrame(filtered)
 
-    # Evaluate
     if sport == "MLB":
         url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={game_date.strftime('%Y-%m-%d')}"
         game_ids = [
@@ -187,7 +188,6 @@ if filtered:
 
     results_df = pd.DataFrame(results)
 
-    # --- Results Table ---
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.subheader("📊 Projection Results")
 
@@ -222,7 +222,6 @@ if filtered:
     html(table_html, height=520, scrolling=False)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # --- Export & Clear ---
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.subheader("📥 Export & Cleanup")
     csv = results_df.to_csv(index=False).encode("utf-8")
@@ -232,6 +231,5 @@ if filtered:
         clear_projections(session_id)
         st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
-
 else:
     st.info("No projections for this date.")
