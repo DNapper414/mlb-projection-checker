@@ -103,7 +103,7 @@ if filtered:
 
     results_df = pd.DataFrame(results)
 
-    # --- Render HTML Table ---
+    # --- Render HTML Table with Trashcan Icons Only
     table_html = """
     <style>
     table {
@@ -123,8 +123,8 @@ if filtered:
         color: #fff;
     }
     .trash {
-        font-size: 16px;
         text-align: center;
+        font-size: 18px;
     }
     @media (max-width: 600px) {
         table {
@@ -132,9 +132,6 @@ if filtered:
         }
         th, td {
             padding: 4px 5px;
-        }
-        .trash {
-            font-size: 14px;
         }
     }
     </style>
@@ -152,7 +149,7 @@ if filtered:
         <tbody>
     """
 
-    for i, row in results_df.iterrows():
+    for _, row in results_df.iterrows():
         met_icon = "✅" if row["✅ Met?"] else "❌"
         table_html += f"""
         <tr>
@@ -161,19 +158,16 @@ if filtered:
             <td>{row["Target"]}</td>
             <td>{row["Actual"]}</td>
             <td>{met_icon}</td>
-            <td class="trash">[REMOVE_{i}]</td>
+            <td class="trash">🗑️</td>
         </tr>
         """
 
     table_html += "</tbody></table>"
+    html(table_html, height=500, scrolling=False)
 
-    # Render table with placeholders for buttons
-    html_block = table_html
-    html(html_block.replace("[REMOVE_", ""), height=500, scrolling=False)
-
-    # --- Replace placeholders with working Streamlit buttons
+    # --- Remove buttons synced by row
     for i, row in results_df.iterrows():
-        if st.button("❌", key=f"remove_{i}"):
+        if st.button(f"Remove: {row['Player']} - {row['Metric']}", key=f"remove_{i}"):
             remove_projection(df.iloc[i]["id"], session_id)
             st.rerun()
 
