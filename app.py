@@ -7,22 +7,21 @@ from utils import (
     fetch_boxscore_nba,
     evaluate_projections,
     evaluate_projections_nba,
-    get_nba_players
+    get_nba_players_from_games
 )
 
 st.set_page_config(page_title="Bet Tracker by Apprentice Ent. Sports Picks", layout="centered")
 
 st.title("🏀⚾ Bet Tracker by Apprentice Ent. Sports Picks")
 
-# Choose sport and game date
 sport = st.radio("Select Sport", ["MLB", "NBA"])
 game_date = st.date_input("📅 Choose Game Date", value=datetime.today())
 
 st.subheader(f"➕ Add {sport} Player Projection")
 
-# Player and metric entry
+# Player input
 if sport == "NBA":
-    nba_players = get_nba_players()
+    nba_players = get_nba_players_from_games(game_date.strftime("%Y-%m-%d"))
     player = st.selectbox("Player Name", nba_players)
     metric = st.selectbox("Metric", ["points", "assists", "rebounds", "steals", "blocks", "3pts made", "PRA"])
 else:
@@ -42,7 +41,7 @@ if st.button("➕ Add to Table"):
         "Target": target
     })
 
-# Show results if available
+# Show results
 if "projections" in st.session_state and st.session_state.projections:
     all_proj_df = pd.DataFrame(st.session_state.projections)
     st.subheader("📊 Results")
@@ -60,7 +59,6 @@ if "projections" in st.session_state and st.session_state.projections:
         mlb_proj = [p for p in st.session_state.projections if p["Sport"] == "MLB"]
         mlb_df = pd.DataFrame(mlb_proj) if mlb_proj else pd.DataFrame(columns=["Player", "Metric", "Target"])
         results = evaluate_projections(mlb_df, boxscores)
-
     else:
         nba_proj = [p for p in st.session_state.projections if p["Sport"] == "NBA"]
         nba_df = pd.DataFrame(nba_proj) if nba_proj else pd.DataFrame(columns=["Player", "Metric", "Target"])
@@ -68,5 +66,4 @@ if "projections" in st.session_state and st.session_state.projections:
 
     result_df = pd.DataFrame(results)
     st.dataframe(result_df, use_container_width=True)
-
     st.download_button("📥 Download Results CSV", result_df.to_csv(index=False), file_name="bet_results.csv")

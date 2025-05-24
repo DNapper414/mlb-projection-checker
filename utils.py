@@ -44,7 +44,7 @@ def evaluate_projections(projections_df, boxscores):
     return results
 
 # -----------------------
-# NBA Support via RapidAPI v2
+# NBA Support via RapidAPI (Box Score-Based)
 # -----------------------
 
 RAPIDAPI_KEY = "47945fd24fmsh2539580c53289bdp119b7bjsne5525ec5acdf"
@@ -54,11 +54,22 @@ HEADERS = {
     "X-RapidAPI-Host": RAPIDAPI_HOST,
 }
 
-def get_nba_players():
-    url = "https://api-nba-v1.p.rapidapi.com/players?league=standard&season=2024"
-    resp = requests.get(url, headers=HEADERS)
-    data = resp.json().get("response", [])
-    return sorted([f"{p['firstname']} {p['lastname']}" for p in data])
+def get_nba_players_from_games(date_str):
+    games_url = f"https://api-nba-v1.p.rapidapi.com/games?date={date_str}"
+    games_resp = requests.get(games_url, headers=HEADERS)
+    games_data = games_resp.json().get("response", [])
+    all_players = set()
+
+    for game in games_data:
+        game_id = game.get("id")
+        stats_url = f"https://api-nba-v1.p.rapidapi.com/players/statistics?game={game_id}"
+        stats_resp = requests.get(stats_url, headers=HEADERS)
+        stats_data = stats_resp.json().get("response", [])
+        for s in stats_data:
+            name = f"{s['player']['firstname']} {s['player']['lastname']}".strip()
+            all_players.add(name)
+
+    return sorted(all_players)
 
 def fetch_boxscore_nba(date_str):
     games_url = f"https://api-nba-v1.p.rapidapi.com/games?date={date_str}"
