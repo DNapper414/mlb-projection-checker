@@ -23,8 +23,8 @@ from supabase_client import (
     clear_projections
 )
 
-# --- Auto-refresh every 20s ---
-st_autorefresh(interval=20000, key="auto_refresh")
+# --- Auto-refresh every 60 seconds ---
+st_autorefresh(interval=60000, key="auto_refresh")
 
 # --- Session ID persistence ---
 if "session_id" in st.query_params:
@@ -103,7 +103,7 @@ if filtered:
 
     results_df = pd.DataFrame(results)
 
-    # --- Render HTML Table with Trashcan Icons Only
+    # --- Render HTML Table with Only Trashcan Icons
     table_html = """
     <style>
     table {
@@ -165,13 +165,7 @@ if filtered:
     table_html += "</tbody></table>"
     html(table_html, height=500, scrolling=False)
 
-    # --- Remove buttons synced by row
-    for i, row in results_df.iterrows():
-        if st.button(f"Remove: {row['Player']} - {row['Metric']}", key=f"remove_{i}"):
-            remove_projection(df.iloc[i]["id"], session_id)
-            st.rerun()
-
-    # --- Download and Clear
+    # --- Export / Clear
     st.markdown("### 📥 Export & Cleanup")
     csv = results_df.to_csv(index=False).encode("utf-8")
     st.download_button("📥 Download CSV", csv, file_name="projections.csv")
