@@ -49,18 +49,19 @@ def evaluate_projections(projections_df, boxscores):
     return results
 
 # -----------------------
-# NBA Support via RapidAPI (Live Stats)
+# NBA Support via RapidAPI v2
 # -----------------------
 
 RAPIDAPI_KEY = "47945fd24fmsh2539580c53289bdp119b7bjsne5525ec5acdf"
 RAPIDAPI_HOST = "api-nba-v1.p.rapidapi.com"
+
 HEADERS = {
     "X-RapidAPI-Key": RAPIDAPI_KEY,
     "X-RapidAPI-Host": RAPIDAPI_HOST,
 }
 
 def fetch_boxscore_nba(date_str):
-    # 1. Get games for date
+    # 1. Get games on this date
     games_url = f"https://api-nba-v1.p.rapidapi.com/games?date={date_str}"
     games_resp = requests.get(games_url, headers=HEADERS)
     games_data = games_resp.json().get("response", [])
@@ -73,8 +74,8 @@ def fetch_boxscore_nba(date_str):
         game_id = game.get("id")
         stats_url = f"https://api-nba-v1.p.rapidapi.com/players/statistics?game={game_id}"
         stats_resp = requests.get(stats_url, headers=HEADERS)
-        stats = stats_resp.json().get("response", [])
-        all_stats.extend(stats)
+        stats_data = stats_resp.json().get("response", [])
+        all_stats.extend(stats_data)
 
     return all_stats
 
@@ -96,6 +97,7 @@ def evaluate_projections_nba(projections_df, game_date):
 
             if input_name == full_name or input_name in full_name:
                 found = True
+
                 if metric == "PRA":
                     actual = (
                         stats.get("points", 0) +
@@ -103,7 +105,7 @@ def evaluate_projections_nba(projections_df, game_date):
                         stats.get("rebounds", 0)
                     )
                 elif metric == "3pts made":
-                    actual = stats.get("threePointsMade", 0)
+                    actual = stats.get("tpm", 0) or stats.get("threePointsMade", 0)  # fallback
                 else:
                     metric_map = {
                         "points": "points",
@@ -112,7 +114,9 @@ def evaluate_projections_nba(projections_df, game_date):
                         "steals": "steals",
                         "blocks": "blocks"
                     }
-                    actual = stats.get(metric_map.get(metric, ""), 0)
+                    field = metric_map.get(metric, "")
+                    actual = stats.get(field, 0)
+
                 break
 
         results.append({
