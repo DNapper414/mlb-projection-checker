@@ -1,8 +1,8 @@
 import requests
 
-# -----------------------
-# MLB Support
-# -----------------------
+# -------------------------------
+# MLB FUNCTIONS
+# -------------------------------
 
 def fetch_boxscore(game_id):
     url = f"https://statsapi.mlb.com/api/v1/game/{game_id}/boxscore"
@@ -43,9 +43,9 @@ def evaluate_projections(projections_df, boxscores):
         })
     return results
 
-# -----------------------
-# NBA Support via RapidAPI (Box Score-Based)
-# -----------------------
+# -------------------------------
+# NBA FUNCTIONS (RapidAPI V2)
+# -------------------------------
 
 RAPIDAPI_KEY = "47945fd24fmsh2539580c53289bdp119b7bjsne5525ec5acdf"
 RAPIDAPI_HOST = "api-nba-v1.p.rapidapi.com"
@@ -55,6 +55,7 @@ HEADERS = {
 }
 
 def get_nba_players_from_games(date_str):
+    """Collect all NBA player names from all boxscores on given date"""
     games_url = f"https://api-nba-v1.p.rapidapi.com/games?date={date_str}"
     games_resp = requests.get(games_url, headers=HEADERS)
     games_data = games_resp.json().get("response", [])
@@ -72,32 +73,38 @@ def get_nba_players_from_games(date_str):
     return sorted(all_players)
 
 def fetch_boxscore_nba(date_str):
+    """Return all player boxscore stats for every NBA game on the date"""
     games_url = f"https://api-nba-v1.p.rapidapi.com/games?date={date_str}"
     games_resp = requests.get(games_url, headers=HEADERS)
     games_data = games_resp.json().get("response", [])
     all_stats = []
+
     for game in games_data:
         game_id = game.get("id")
         stats_url = f"https://api-nba-v1.p.rapidapi.com/players/statistics?game={game_id}"
         stats_resp = requests.get(stats_url, headers=HEADERS)
         stats_data = stats_resp.json().get("response", [])
         all_stats.extend(stats_data)
+
     return all_stats
 
 def evaluate_projections_nba(projections_df, game_date):
     boxscores = fetch_boxscore_nba(game_date)
     results = []
+
     for _, row in projections_df.iterrows():
         input_name = row["Player"].strip().lower()
         metric = row["Metric"]
         target = row["Target"]
         actual = 0
         found = False
+
         for stat in boxscores:
             player = stat.get("player", {})
             stats = stat.get("statistics", {})
             full_name = f"{player.get('firstname', '')} {player.get('lastname', '')}".strip().lower()
-            if input_name == full_name or input_name in full_name:
+
+            if input_name in full_name or full_name in input_name:
                 found = True
                 if metric == "PRA":
                     actual = stats.get("points", 0) + stats.get("assists", 0) + stats.get("rebounds", 0)
@@ -106,6 +113,7 @@ def evaluate_projections_nba(projections_df, game_date):
                 else:
                     actual = stats.get(metric, 0)
                 break
+
         results.append({
             "Player": row["Player"],
             "Metric": metric,
@@ -113,4 +121,5 @@ def evaluate_projections_nba(projections_df, game_date):
             "Actual": actual if found else "N/A",
             "✅ Met?": actual >= target if found else False
         })
+
     return results
