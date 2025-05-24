@@ -63,24 +63,72 @@ if sport == "MLB":
 else:
     metric_options = ["points", "assists", "rebounds", "3pts made", "steals", "blocks", "PRA"]
 
+# --- Date selection (persisted)
+recent_days = [datetime.now().date() - timedelta(days=i) for i in range(7)]
+date_options = [d.strftime("%Y-%m-%d") for d in recent_days]
+default_date = load_selected_date() or date_options[0]
+selected_date = default_date
+if default_date not in date_options:
+    selected_date = date_options[0]
+selected_date = st.selectbox("📅 Choose a Game Date", date_options, index=date_options.index(selected_date))
+save_selected_date(selected_date)
+
+# --- Fetch autocomplete player lists ---
+def get_nba_player_names():
+    url = "https://www.balldontlie.io/api/v1/players?per_page=100"
+    names = []
+    page = 1
+    while True:
+        resp = requests.get(f"{url}&page={page}")
+        if resp.status_code != 200:
+            break
+        data = resp.json().get("data", [])
+        if not data:
+            break
+        for p in data:
+            names.append(f"{p['first_name']} {p['last_name']}")
+        if not resp.json().get("meta", {}).get("next_page"):
+            break
+        page += 1
+    return sorted(names)
+
+def get_mlb_player_names(date_str):
+    url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={date_str}"
+    game_ids = []
+    try:
+        data = requests.get(url).json()
+        for d in data.get("dates", []):
+            for g in d.get("games", []):
+                game_ids.append(str(g["gamePk"]))
+    except:
+        return []
+
+    names = set()
+    for gid in game_ids:
+        box = fetch_boxscore(gid)
+        if not box:
+            continue
+        for team in ["home", "away"]:
+            players = box["teams"][team]["players"]
+            for pdata in players.values():
+                name = pdata["person"]["fullName"]
+                names.add(name)
+    return sorted(list(names))
+
+nba_players = get_nba_player_names() if sport == "NBA" else []
+mlb_players = get_mlb_player_names(selected_date) if sport == "MLB" else []
+
 # --- Projection Entry Form ---
 with st.form("manual_input"):
     st.subheader(f"📝 Add {sport} Player Projection")
 
-    player = st.text_input("Player Name (e.g. LeBron James or Aaron Judge)")
+    if sport == "NBA":
+        player = st.selectbox("Player Name", nba_players)
+    else:
+        player = st.selectbox("Player Name", mlb_players)
+
     metric = st.selectbox("Metric", metric_options)
     target = st.number_input("Target", value=1)
-
-    # Date selection (with file persistence)
-    recent_days = [datetime.now().date() - timedelta(days=i) for i in range(7)]
-    date_options = [d.strftime("%Y-%m-%d") for d in recent_days]
-    default_date = load_selected_date() or date_options[0]
-    selected_date = st.selectbox(
-        "📅 Choose a Game Date",
-        date_options,
-        index=date_options.index(default_date) if default_date in date_options else 0
-    )
-    save_selected_date(selected_date)
 
     submitted = st.form_submit_button("Add")
 
