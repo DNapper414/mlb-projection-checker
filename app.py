@@ -1,4 +1,8 @@
 import streamlit as st
+
+# This MUST be the first Streamlit call
+st.set_page_config(page_title="Bet Tracker by Apprentice Ent. Sports Picks", layout="centered")
+
 import pandas as pd
 import requests
 import uuid
@@ -17,7 +21,7 @@ from supabase_client import (
     clear_projections
 )
 
-# Safe session ID using Streamlit's query parameters
+# Persistent session ID using Streamlit's query parameters
 query_params = st.experimental_get_query_params()
 if "session_id" in query_params:
     session_id = query_params["session_id"][0]
@@ -27,11 +31,9 @@ else:
 
 st.session_state.session_id = session_id
 
-# App config
-st.set_page_config(page_title="Bet Tracker by Apprentice Ent. Sports Picks", layout="centered")
+# App UI
 st.title("🏀⚾ Bet Tracker by Apprentice Ent. Sports Picks")
 
-# UI Inputs
 sport = st.radio("Select Sport", ["MLB", "NBA"])
 game_date = st.date_input("📅 Choose Game Date", value=datetime.today())
 st.subheader(f"➕ Add {sport} Player Projection")
@@ -97,7 +99,7 @@ if projections:
 
     results_df = pd.DataFrame(results)
 
-    # Render table
+    # Render results
     header = st.columns(6)
     header[0].markdown("**Player**")
     header[1].markdown("**Metric**")
@@ -117,7 +119,7 @@ if projections:
             remove_projection(df.iloc[i]["id"], session_id)
             st.rerun()
 
-    # Download + clear
+    # Download CSV
     csv = results_df.to_csv(index=False).encode("utf-8")
     st.download_button("📥 Download Results CSV", csv, file_name="bet_results.csv")
 
