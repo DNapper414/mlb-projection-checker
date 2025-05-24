@@ -63,35 +63,40 @@ if sport == "MLB":
 else:
     metric_options = ["points", "assists", "rebounds", "3pts made", "steals", "blocks", "PRA"]
 
-# --- Date selection (persisted)
+# --- Date Selection ---
 recent_days = [datetime.now().date() - timedelta(days=i) for i in range(7)]
 date_options = [d.strftime("%Y-%m-%d") for d in recent_days]
 default_date = load_selected_date() or date_options[0]
-selected_date = default_date
-if default_date not in date_options:
-    selected_date = date_options[0]
+selected_date = default_date if default_date in date_options else date_options[0]
 selected_date = st.selectbox("📅 Choose a Game Date", date_options, index=date_options.index(selected_date))
 save_selected_date(selected_date)
 
-# --- Fetch autocomplete player lists ---
+# --- Autocomplete: NBA Players ---
 def get_nba_player_names():
-    url = "https://www.balldontlie.io/api/v1/players?per_page=100"
     names = []
     page = 1
     while True:
-        resp = requests.get(f"{url}&page={page}")
-        if resp.status_code != 200:
+        try:
+            url = f"https://www.balldontlie.io/api/v1/players?per_page=100&page={page}"
+            resp = requests.get(url, timeout=10)
+            if resp.status_code != 200:
+                print(f"NBA API error: {resp.status_code}")
+                break
+            data = resp.json().get("data", [])
+            if not data:
+                break
+            for p in data:
+                full_name = f"{p['first_name']} {p['last_name']}".strip()
+                names.append(full_name)
+            if not resp.json().get("meta", {}).get("next_page"):
+                break
+            page += 1
+        except Exception as e:
+            print(f"Error fetching NBA names: {e}")
             break
-        data = resp.json().get("data", [])
-        if not data:
-            break
-        for p in data:
-            names.append(f"{p['first_name']} {p['last_name']}")
-        if not resp.json().get("meta", {}).get("next_page"):
-            break
-        page += 1
     return sorted(names)
 
+# --- Autocomplete: MLB Players ---
 def get_mlb_player_names(date_str):
     url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={date_str}"
     game_ids = []
@@ -115,6 +120,7 @@ def get_mlb_player_names(date_str):
                 names.add(name)
     return sorted(list(names))
 
+# --- Load name options
 nba_players = get_nba_player_names() if sport == "NBA" else []
 mlb_players = get_mlb_player_names(selected_date) if sport == "MLB" else []
 
