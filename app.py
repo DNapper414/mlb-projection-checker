@@ -7,7 +7,7 @@ from streamlit_autorefresh import st_autorefresh
 import pandas as pd
 import requests
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from utils import (
     fetch_boxscore,
     evaluate_projections,
@@ -23,7 +23,7 @@ from supabase_client import (
 )
 
 # --- Auto-refresh every 20 seconds ---
-st_autorefresh(interval=20000, key="auto_refresh")  # 20 seconds = 20000 ms
+st_autorefresh(interval=20000, key="auto_refresh")
 
 # --- Persistent session_id using query params ---
 if "session_id" in st.query_params:
@@ -80,13 +80,16 @@ if st.button("➕ Add to Table") and player:
     })
     st.success(f"Projection added for {player}")
 
-# --- Load & Evaluate Projections ---
+# --- Load & Filter Projections ---
 response = get_projections(session_id)
-projections = [p for p in response.data if p["sport"] == sport]
+filtered_projections = [
+    p for p in response.data
+    if p["sport"] == sport and p["date"] == game_date.strftime("%Y-%m-%d")
+]
 
-if projections:
+if filtered_projections:
     st.subheader("📊 Results")
-    df = pd.DataFrame(projections)
+    df = pd.DataFrame(filtered_projections)
 
     if sport == "MLB":
         schedule_url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={game_date.strftime('%Y-%m-%d')}"
@@ -132,4 +135,4 @@ if projections:
         clear_projections(session_id)
         st.rerun()
 else:
-    st.info("No projections yet. Add one above.")
+    st.info("No projections for this date. Add one above or select a different date.")
