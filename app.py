@@ -3,6 +3,7 @@ import pandas as pd
 import requests
 import uuid
 from datetime import datetime
+from streamlit_cookies_manager import EncryptedCookieManager
 from utils import (
     fetch_boxscore,
     evaluate_projections,
@@ -17,10 +18,23 @@ from supabase_client import (
     clear_projections
 )
 
-if "session_id" not in st.session_state:
-    st.session_state.session_id = str(uuid.uuid4())
-session_id = st.session_state.session_id
+# Persistent session ID using cookies
+cookies = EncryptedCookieManager(
+    prefix="bet_tracker_",
+    password="replace-this-with-a-secret-passphrase"  # Replace with a secret
+)
 
+if not cookies.ready():
+    st.stop()
+
+session_id = cookies.get("session_id")
+if session_id is None:
+    session_id = str(uuid.uuid4())
+    cookies.set("session_id", session_id)
+
+st.session_state.session_id = session_id
+
+# UI
 st.set_page_config(page_title="Bet Tracker by Apprentice Ent. Sports Picks", layout="centered")
 st.title("🏀⚾ Bet Tracker by Apprentice Ent. Sports Picks")
 
@@ -28,7 +42,7 @@ sport = st.radio("Select Sport", ["MLB", "NBA"])
 game_date = st.date_input("📅 Choose Game Date", value=datetime.today())
 st.subheader(f"➕ Add {sport} Player Projection")
 
-# Player Autocomplete
+# Autocomplete
 players = []
 if sport == "NBA":
     try:
