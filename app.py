@@ -109,7 +109,7 @@ if filtered_projections:
 
     results_df = pd.DataFrame(results)
 
-    # --- Responsive HTML Table (Dark-mode friendly) ---
+    # --- Responsive Table with Fixed Font Colors for Dark Mode ---
     table_html = """
     <style>
         .responsive-table {
@@ -120,7 +120,8 @@ if filtered_projections:
             width: 100%;
             border-collapse: collapse;
             font-size: 14px;
-            color: inherit;  /* ✅ Works in dark/light mode */
+            background-color: #222;
+            color: #eee;
         }
         th, td {
             padding: 8px 10px;
