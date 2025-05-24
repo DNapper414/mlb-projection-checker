@@ -35,14 +35,6 @@ def save_projections(data):
 if "manual_projections" not in st.session_state:
     st.session_state.manual_projections = load_projections()
 
-# --- Lock date selection on rerun ---
-recent_days = [datetime.now().date() - timedelta(days=i) for i in range(7)]
-date_options = [d.strftime("%Y-%m-%d") for d in recent_days]
-if "selected_date" not in st.session_state:
-    st.session_state.selected_date = date_options[0]
-selected_date = st.selectbox("📅 Choose a Game Date", date_options, index=date_options.index(st.session_state.selected_date))
-st.session_state.selected_date = selected_date
-
 # --- Branding ---
 logo_path = os.path.join(os.path.dirname(__file__), "logo.png")
 if os.path.exists(logo_path):
@@ -60,12 +52,22 @@ if sport == "MLB":
 else:
     metric_options = ["points", "assists", "rebounds", "3pts made", "steals", "blocks", "PRA"]
 
-# --- Add Projection Form ---
+# --- Projection Entry Form ---
 with st.form("manual_input"):
     st.subheader(f"📝 Add {sport} Player Projection")
+
     player = st.text_input("Player Name (e.g. LeBron James or Aaron Judge)")
     metric = st.selectbox("Metric", metric_options)
     target = st.number_input("Target", value=1)
+
+    # 👇 Move and manage the date selector here
+    recent_days = [datetime.now().date() - timedelta(days=i) for i in range(7)]
+    date_options = [d.strftime("%Y-%m-%d") for d in recent_days]
+    if "selected_date" not in st.session_state:
+        st.session_state.selected_date = date_options[0]
+    selected_date = st.selectbox("📅 Choose a Game Date", date_options, index=date_options.index(st.session_state.selected_date))
+    st.session_state.selected_date = selected_date
+
     submitted = st.form_submit_button("Add")
 
     if submitted and player and metric:
@@ -92,7 +94,7 @@ if not projections_df.empty:
 
     # --- Load Boxscores and Evaluate ---
     if sport == "MLB":
-        url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={selected_date}"
+        url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={st.session_state.selected_date}"
         data = requests.get(url).json()
         game_ids = [
             str(g["gamePk"])
@@ -104,7 +106,7 @@ if not projections_df.empty:
         boxscores = [b for b in boxscores if b]
         results = evaluate_projections(projections_df, boxscores)
     else:
-        results = evaluate_projections_nba(projections_df, selected_date)
+        results = evaluate_projections_nba(projections_df, st.session_state.selected_date)
 
     # --- Render Table ---
     if results:
