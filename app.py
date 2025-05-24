@@ -1,6 +1,6 @@
 import streamlit as st
 
-# This MUST be the first Streamlit call
+# Must be first Streamlit call
 st.set_page_config(page_title="Bet Tracker by Apprentice Ent. Sports Picks", layout="centered")
 
 import pandas as pd
@@ -21,13 +21,12 @@ from supabase_client import (
     clear_projections
 )
 
-# Persistent session ID using Streamlit's query parameters
-query_params = st.experimental_get_query_params()
-if "session_id" in query_params:
-    session_id = query_params["session_id"][0]
+# Persistent session ID via query parameters (Streamlit v1.32+)
+if "session_id" in st.query_params:
+    session_id = st.query_params["session_id"]
 else:
     session_id = str(uuid.uuid4())
-    st.experimental_set_query_params(session_id=session_id)
+    st.query_params["session_id"] = session_id
 
 st.session_state.session_id = session_id
 
@@ -38,7 +37,7 @@ sport = st.radio("Select Sport", ["MLB", "NBA"])
 game_date = st.date_input("📅 Choose Game Date", value=datetime.today())
 st.subheader(f"➕ Add {sport} Player Projection")
 
-# Autocomplete player names
+# Autocomplete players
 players = []
 if sport == "NBA":
     try:
@@ -61,7 +60,7 @@ metric = st.selectbox(
 )
 target = st.number_input("Target Value", min_value=0, value=1)
 
-# Add projection to Supabase
+# Add projection
 if st.button("➕ Add to Table") and player:
     add_projection({
         "sport": sport,
@@ -74,7 +73,7 @@ if st.button("➕ Add to Table") and player:
     })
     st.success(f"Projection added for {player}")
 
-# Retrieve projections
+# Load projections
 response = get_projections(session_id)
 projections = [p for p in response.data if p["sport"] == sport]
 
@@ -82,7 +81,7 @@ if projections:
     st.subheader("📊 Results")
     df = pd.DataFrame(projections)
 
-    # Evaluate based on sport
+    # Evaluate projections
     if sport == "MLB":
         schedule_url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={game_date.strftime('%Y-%m-%d')}"
         resp = requests.get(schedule_url).json()
@@ -99,7 +98,7 @@ if projections:
 
     results_df = pd.DataFrame(results)
 
-    # Render results
+    # Render table
     header = st.columns(6)
     header[0].markdown("**Player**")
     header[1].markdown("**Metric**")
