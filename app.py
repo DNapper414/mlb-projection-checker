@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import requests
+import uuid
 from datetime import datetime
 from utils import (
     fetch_boxscore,
@@ -8,100 +9,110 @@ from utils import (
     evaluate_projections_nba_nbaapi,
     get_nba_players_today
 )
+from supabase_client import (
+    add_projection,
+    get_projections,
+    remove_projection,
+    clear_projections
+)
 
+# Assign a unique session ID per user session
+if "session_id" not in st.session_state:
+    st.session_state.session_id = str(uuid.uuid4())
+session_id = st.session_state.session_id
+
+# Streamlit page config
 st.set_page_config(page_title="Bet Tracker by Apprentice Ent. Sports Picks", layout="centered")
 st.title("🏀⚾ Bet Tracker by Apprentice Ent. Sports Picks")
 
+# User input: Sport and Game Date
 sport = st.radio("Select Sport", ["MLB", "NBA"])
 game_date = st.date_input("📅 Choose Game Date", value=datetime.today())
-
 st.subheader(f"➕ Add {sport} Player Projection")
 
-# NBA Player Options
+# NBA Player Autocomplete
 nba_players = []
 if sport == "NBA":
     try:
         nba_players = get_nba_players_today(game_date.strftime("%Y-%m-%d"))
     except Exception:
         st.warning("⚠️ Could not load NBA player names. Use manual entry.")
-        nba_players = []
 
-# Player Input
-if sport == "NBA":
-    if nba_players:
-        player = st.selectbox("Player Name", nba_players)
-    else:
-        player = st.text_input("Player Name")
-    metric = st.selectbox("Metric", ["points", "assists", "rebounds", "steals", "blocks", "3pts made", "PRA"])
-else:
-    player = st.text_input("Player Name")
-    metric = st.selectbox("Metric", ["hits", "homeRuns", "totalBases", "rbi", "baseOnBalls", "runs", "stolenBases"])
-
+# Player + Metric Inputs
+player = st.selectbox("Player Name", nba_players) if nba_players else st.text_input("Player Name")
+metric = st.selectbox(
+    "Metric",
+    ["points", "assists", "rebounds", "steals", "blocks", "3pts made", "PRA"]
+    if sport == "NBA"
+    else ["hits", "homeRuns", "totalBases", "rbi", "baseOnBalls", "runs", "stolenBases"]
+)
 target = st.number_input("Target Value", min_value=0, value=1)
 
-# Add to Table
-if st.button("➕ Add to Table"):
-    if "projections" not in st.session_state:
-        st.session_state.projections = []
-    st.session_state.projections.append({
-        "Sport": sport,
-        "Date": game_date.strftime("%Y-%m-%d"),
-        "Player": player,
-        "Metric": metric,
-        "Target": target
+# Add new projection
+if st.button("➕ Add to Table") and player:
+    add_projection({
+        "sport": sport,
+        "date": game_date.strftime("%Y-%m-%d"),
+        "player": player,
+        "metric": metric,
+        "target": target,
+        "actual": None,
+        "session_id": session_id
     })
+    st.success(f"Projection added for {player}")
 
-# Show Results
-if "projections" in st.session_state and st.session_state.projections:
+# Retrieve and filter projections
+response = get_projections(session_id)
+projections = [p for p in response.data if p["sport"] == sport]
+
+if projections:
     st.subheader("📊 Results")
+    df = pd.DataFrame(projections)
 
-    filtered = [p for p in st.session_state.projections if p["Sport"] == sport]
-    df = pd.DataFrame(filtered)
-
-    if df.empty:
-        st.info("No projections added.")
+    # Evaluate actual results
+    if sport == "MLB":
+        schedule_url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={game_date.strftime('%Y-%m-%d')}"
+        resp = requests.get(schedule_url).json()
+        game_ids = [
+            str(game["gamePk"])
+            for d in resp.get("dates", [])
+            for game in d.get("games", [])
+            if game.get("status", {}).get("abstractGameState") in ["Final", "Live", "In Progress"]
+        ]
+        boxscores = [fetch_boxscore(gid) for gid in game_ids]
+        results = evaluate_projections(df, boxscores)
     else:
-        if st.button("🧹 Clear All Projections"):
-            st.session_state.projections = [p for p in st.session_state.projections if p["Sport"] != sport]
+        results = evaluate_projections_nba_nbaapi(df, game_date.strftime("%Y-%m-%d"))
+
+    results_df = pd.DataFrame(results)
+
+    # Display results table
+    header = st.columns(6)
+    header[0].markdown("**Player**")
+    header[1].markdown("**Metric**")
+    header[2].markdown("**Target**")
+    header[3].markdown("**Actual**")
+    header[4].markdown("**Met?**")
+    header[5].markdown("**🗑 Remove**")
+
+    for i, row in results_df.iterrows():
+        cols = st.columns(6)
+        cols[0].markdown(row["Player"])
+        cols[1].markdown(row["Metric"])
+        cols[2].markdown(f"{row['Target']}")
+        cols[3].markdown(f"{row['Actual']}")
+        cols[4].markdown("✅" if row["✅ Met?"] else "❌")
+        if cols[5].button("❌", key=f"remove_{i}"):
+            remove_projection(df.iloc[i]["id"], session_id)
             st.rerun()
 
-        if sport == "MLB":
-            schedule_url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={game_date.strftime('%Y-%m-%d')}"
-            resp = requests.get(schedule_url).json()
-            game_ids = [
-                str(game["gamePk"])
-                for d in resp.get("dates", [])
-                for game in d.get("games", [])
-                if game.get("status", {}).get("abstractGameState") in ["Final", "Live", "In Progress"]
-            ]
-            boxscores = [fetch_boxscore(gid) for gid in game_ids]
-            results = evaluate_projections(df, boxscores)
-        else:
-            results = evaluate_projections_nba_nbaapi(df, game_date.strftime("%Y-%m-%d"))
+    # Download CSV
+    csv = results_df.to_csv(index=False).encode("utf-8")
+    st.download_button("📥 Download Results CSV", csv, file_name="bet_results.csv")
 
-        results_df = pd.DataFrame(results)
-
-        # Render table with delete buttons
-        header = st.columns(6)
-        header[0].markdown("**Player**")
-        header[1].markdown("**Metric**")
-        header[2].markdown("**Target**")
-        header[3].markdown("**Actual**")
-        header[4].markdown("**Met?**")
-        header[5].markdown("**🗑 Remove Player**")
-
-        for i, row in results_df.iterrows():
-            cols = st.columns(6)
-            cols[0].markdown(row["Player"])
-            cols[1].markdown(row["Metric"])
-            cols[2].markdown(f"{row['Target']}")
-            cols[3].markdown(f"{row['Actual']}")
-            cols[4].markdown("✅" if row["✅ Met?"] else "❌")
-            if cols[5].button("❌", key=f"remove_{sport}_{i}"):
-                index_in_session = df.index[i]
-                del st.session_state.projections[index_in_session]
-                st.rerun()
-
-        # Download
-        csv = results_df.to_csv(index=False).encode("utf-8")
-        st.download_button("📥 Download Results CSV", csv, file_name="bet_results.csv")
+    # Clear all projections
+    if st.button("🧹 Clear All Projections"):
+        clear_projections(session_id)
+        st.rerun()
+else:
+    st.info("No projections yet. Add one above.")
