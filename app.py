@@ -11,19 +11,29 @@ from utils import (
 )
 
 st.set_page_config(page_title="Bet Tracker by Apprentice Ent. Sports Picks", layout="centered")
-
 st.title("🏀⚾ Bet Tracker by Apprentice Ent. Sports Picks")
 
+# --- UI: Sport and Date ---
 sport = st.radio("Select Sport", ["MLB", "NBA"])
 game_date = st.date_input("📅 Choose Game Date", value=datetime.today())
 
 st.subheader(f"➕ Add {sport} Player Projection")
 
-# Player input
+# --- Player Entry ---
+nba_players = []
 if sport == "NBA":
-    nba_players = get_nba_players_from_games(game_date.strftime("%Y-%m-%d"))
-    player = st.selectbox("Player Name", nba_players)
+    try:
+        nba_players = get_nba_players_from_games(game_date.strftime("%Y-%m-%d"))
+    except Exception as e:
+        st.warning("⚠️ Could not load NBA players from live data. You can still type the name manually.")
+        nba_players = []
+
+    if nba_players:
+        player = st.selectbox("Player Name", nba_players)
+    else:
+        player = st.text_input("Player Name (manual entry)")
     metric = st.selectbox("Metric", ["points", "assists", "rebounds", "steals", "blocks", "3pts made", "PRA"])
+
 else:
     player = st.text_input("Player Name")
     metric = st.selectbox("Metric", ["hits", "homeRuns", "totalBases", "rbi", "baseOnBalls", "runs", "stolenBases"])
@@ -41,29 +51,63 @@ if st.button("➕ Add to Table"):
         "Target": target
     })
 
-# Show results
+# --- Show Results ---
 if "projections" in st.session_state and st.session_state.projections:
-    all_proj_df = pd.DataFrame(st.session_state.projections)
     st.subheader("📊 Results")
 
-    if sport == "MLB":
-        schedule_url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={game_date.strftime('%Y-%m-%d')}"
-        resp = requests.get(schedule_url).json()
-        game_ids = [
-            str(game["gamePk"])
-            for d in resp.get("dates", [])
-            for game in d.get("games", [])
-            if game.get("status", {}).get("abstractGameState") in ["Final", "Live", "In Progress"]
-        ]
-        boxscores = [fetch_boxscore(gid) for gid in game_ids]
-        mlb_proj = [p for p in st.session_state.projections if p["Sport"] == "MLB"]
-        mlb_df = pd.DataFrame(mlb_proj) if mlb_proj else pd.DataFrame(columns=["Player", "Metric", "Target"])
-        results = evaluate_projections(mlb_df, boxscores)
-    else:
-        nba_proj = [p for p in st.session_state.projections if p["Sport"] == "NBA"]
-        nba_df = pd.DataFrame(nba_proj) if nba_proj else pd.DataFrame(columns=["Player", "Metric", "Target"])
-        results = evaluate_projections_nba(nba_df, game_date.strftime("%Y-%m-%d"))
+    # Filter projections by sport
+    filtered = [p for p in st.session_state.projections if p["Sport"] == sport]
+    df = pd.DataFrame(filtered)
 
-    result_df = pd.DataFrame(results)
-    st.dataframe(result_df, use_container_width=True)
-    st.download_button("📥 Download Results CSV", result_df.to_csv(index=False), file_name="bet_results.csv")
+    if df.empty:
+        st.info(f"No {sport} projections yet.")
+    else:
+        # Clear All Button
+        if st.button("🧹 Clear All Projections"):
+            st.session_state.projections = [p for p in st.session_state.projections if p["Sport"] != sport]
+            st.rerun()
+
+        # Evaluate Actuals
+        if sport == "MLB":
+            schedule_url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={game_date.strftime('%Y-%m-%d')}"
+            resp = requests.get(schedule_url).json()
+            game_ids = [
+                str(game["gamePk"])
+                for d in resp.get("dates", [])
+                for game in d.get("games", [])
+                if game.get("status", {}).get("abstractGameState") in ["Final", "Live", "In Progress"]
+            ]
+            boxscores = [fetch_boxscore(gid) for gid in game_ids]
+            results = evaluate_projections(df, boxscores)
+        else:
+            results = evaluate_projections_nba(df, game_date.strftime("%Y-%m-%d"))
+
+        results_df = pd.DataFrame(results)
+
+        # Render with trashcans
+        header = st.columns(6)
+        header[0].markdown("**Player**")
+        header[1].markdown("**Metric**")
+        header[2].markdown("**Target**")
+        header[3].markdown("**Actual**")
+        header[4].markdown("**Met?**")
+        header[5].markdown("**🗑 Remove Player**")
+
+        for i, row in results_df.iterrows():
+            cols = st.columns(6)
+            cols[0].markdown(row["Player"])
+            cols[1].markdown(row["Metric"])
+            cols[2].markdown(f"{row['Target']}")
+            cols[3].markdown(f"{row['Actual']}")
+            cols[4].markdown("✅" if row["✅ Met?"] else "❌")
+            if cols[5].button("❌", key=f"remove_{sport}_{i}"):
+                index_in_session = df.index[i]
+                del st.session_state.projections[index_in_session]
+                st.rerun()
+
+        # CSV download
+        csv = results_df.to_csv(index=False).encode("utf-8")
+        st.download_button("📥 Download Results CSV", csv, file_name="bet_results.csv")
+
+else:
+    st.info("Add at least one player to begin.")
