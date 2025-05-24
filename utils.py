@@ -49,35 +49,34 @@ def evaluate_projections(projections_df, boxscores):
     return results
 
 # -----------------------
-# NBA Support (RapidAPI)
+# NBA Support via RapidAPI (Live Stats)
 # -----------------------
 
 RAPIDAPI_KEY = "47945fd24fmsh2539580c53289bdp119b7bjsne5525ec5acdf"
-RAPIDAPI_HOST = "api-basketball.p.rapidapi.com"
+RAPIDAPI_HOST = "api-nba-v1.p.rapidapi.com"
 HEADERS = {
     "X-RapidAPI-Key": RAPIDAPI_KEY,
     "X-RapidAPI-Host": RAPIDAPI_HOST,
 }
 
 def fetch_boxscore_nba(date_str):
-    # Get all games for the selected date
-    games_url = f"https://api-basketball.p.rapidapi.com/games?date={date_str}&league=12&season=2024-2025"
+    # 1. Get games for date
+    games_url = f"https://api-nba-v1.p.rapidapi.com/games?date={date_str}"
     games_resp = requests.get(games_url, headers=HEADERS)
-    games = games_resp.json().get("response", [])
-    if not games:
+    games_data = games_resp.json().get("response", [])
+    if not games_data:
         return []
 
-    player_stats = []
+    all_stats = []
 
-    # For each game, get stats
-    for game in games:
-        game_id = game["id"]
-        stats_url = f"https://api-basketball.p.rapidapi.com/players/statistics?game={game_id}"
+    for game in games_data:
+        game_id = game.get("id")
+        stats_url = f"https://api-nba-v1.p.rapidapi.com/players/statistics?game={game_id}"
         stats_resp = requests.get(stats_url, headers=HEADERS)
         stats = stats_resp.json().get("response", [])
-        player_stats.extend(stats)
+        all_stats.extend(stats)
 
-    return player_stats
+    return all_stats
 
 def evaluate_projections_nba(projections_df, game_date):
     boxscores = fetch_boxscore_nba(game_date)
@@ -91,15 +90,20 @@ def evaluate_projections_nba(projections_df, game_date):
         found = False
 
         for stat in boxscores:
-            full_name = f"{stat['player']['firstname']} {stat['player']['lastname']}".strip().lower()
+            player = stat.get("player", {})
+            stats = stat.get("statistics", {})
+            full_name = f"{player.get('firstname', '')} {player.get('lastname', '')}".strip().lower()
+
             if input_name == full_name or input_name in full_name:
                 found = True
-                stats = stat["statistics"]
-
                 if metric == "PRA":
-                    actual = stats.get("points", 0) + stats.get("rebounds", 0) + stats.get("assists", 0)
+                    actual = (
+                        stats.get("points", 0) +
+                        stats.get("assists", 0) +
+                        stats.get("rebounds", 0)
+                    )
                 elif metric == "3pts made":
-                    actual = stats.get("threepoints_made", 0)
+                    actual = stats.get("threePointsMade", 0)
                 else:
                     metric_map = {
                         "points": "points",
