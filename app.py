@@ -4,6 +4,7 @@ import streamlit as st
 st.set_page_config(page_title="Bet Tracker by Apprentice Ent. Sports Picks", layout="centered")
 
 from streamlit_autorefresh import st_autorefresh
+from streamlit.components.v1 import html  # ✅ Use HTML renderer
 import pandas as pd
 import requests
 import uuid
@@ -108,7 +109,7 @@ if filtered_projections:
 
     results_df = pd.DataFrame(results)
 
-    # --- Responsive HTML Table with Fix ---
+    # --- Render Table via HTML Component ---
     table_html = """
     <style>
         .responsive-table {
@@ -156,9 +157,10 @@ if filtered_projections:
 
     table_html += "</tbody></table></div>"
 
-    st.markdown(table_html, unsafe_allow_html=True)  # ✅ Fix: render HTML
+    # ✅ FIX: render HTML properly
+    html(table_html, height=500, scrolling=True)
 
-    # --- Removal Buttons (native Streamlit buttons)
+    # --- Native Streamlit Remove Buttons ---
     for i, row in results_df.iterrows():
         if st.button("❌ Remove", key=f"remove_{i}"):
             remove_projection(df.iloc[i]["id"], session_id)
