@@ -46,6 +46,30 @@ def evaluate_projections(projections_df, boxscores):
         })
     return results
 
+def get_mlb_players_today(date_str):
+    """Return all player names from MLB games on a given date."""
+    url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={date_str}"
+    resp = requests.get(url).json()
+    game_ids = [
+        str(game["gamePk"])
+        for d in resp.get("dates", [])
+        for game in d.get("games", [])
+        if game.get("status", {}).get("abstractGameState") in ["Final", "Live", "In Progress", "Preview"]
+    ]
+
+    player_names = set()
+    for gid in game_ids:
+        boxscore = fetch_boxscore(gid)
+        if not boxscore:
+            continue
+        for team in ["home", "away"]:
+            players = boxscore["teams"][team]["players"]
+            for pdata in players.values():
+                name = pdata["person"]["fullName"]
+                player_names.add(name)
+
+    return sorted(player_names)
+
 # -------------------------------
 # NBA FUNCTIONS (nba_api)
 # -------------------------------

@@ -7,7 +7,8 @@ from utils import (
     fetch_boxscore,
     evaluate_projections,
     evaluate_projections_nba_nbaapi,
-    get_nba_players_today
+    get_nba_players_today,
+    get_mlb_players_today
 )
 from supabase_client import (
     add_projection,
@@ -16,30 +17,32 @@ from supabase_client import (
     clear_projections
 )
 
-# Assign a unique session ID per user session
 if "session_id" not in st.session_state:
     st.session_state.session_id = str(uuid.uuid4())
 session_id = st.session_state.session_id
 
-# Streamlit page config
 st.set_page_config(page_title="Bet Tracker by Apprentice Ent. Sports Picks", layout="centered")
 st.title("🏀⚾ Bet Tracker by Apprentice Ent. Sports Picks")
 
-# User input: Sport and Game Date
 sport = st.radio("Select Sport", ["MLB", "NBA"])
 game_date = st.date_input("📅 Choose Game Date", value=datetime.today())
 st.subheader(f"➕ Add {sport} Player Projection")
 
-# NBA Player Autocomplete
-nba_players = []
+# Player Autocomplete
+players = []
 if sport == "NBA":
     try:
-        nba_players = get_nba_players_today(game_date.strftime("%Y-%m-%d"))
+        players = get_nba_players_today(game_date.strftime("%Y-%m-%d"))
     except Exception:
         st.warning("⚠️ Could not load NBA player names. Use manual entry.")
+elif sport == "MLB":
+    try:
+        players = get_mlb_players_today(game_date.strftime("%Y-%m-%d"))
+    except Exception:
+        st.warning("⚠️ Could not load MLB player names. Use manual entry.")
 
-# Player + Metric Inputs
-player = st.selectbox("Player Name", nba_players) if nba_players else st.text_input("Player Name")
+player = st.selectbox("Player Name", players) if players else st.text_input("Player Name")
+
 metric = st.selectbox(
     "Metric",
     ["points", "assists", "rebounds", "steals", "blocks", "3pts made", "PRA"]
@@ -48,7 +51,6 @@ metric = st.selectbox(
 )
 target = st.number_input("Target Value", min_value=0, value=1)
 
-# Add new projection
 if st.button("➕ Add to Table") and player:
     add_projection({
         "sport": sport,
@@ -61,7 +63,6 @@ if st.button("➕ Add to Table") and player:
     })
     st.success(f"Projection added for {player}")
 
-# Retrieve and filter projections
 response = get_projections(session_id)
 projections = [p for p in response.data if p["sport"] == sport]
 
@@ -69,7 +70,6 @@ if projections:
     st.subheader("📊 Results")
     df = pd.DataFrame(projections)
 
-    # Evaluate actual results
     if sport == "MLB":
         schedule_url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={game_date.strftime('%Y-%m-%d')}"
         resp = requests.get(schedule_url).json()
@@ -86,7 +86,6 @@ if projections:
 
     results_df = pd.DataFrame(results)
 
-    # Display results table
     header = st.columns(6)
     header[0].markdown("**Player**")
     header[1].markdown("**Metric**")
@@ -106,11 +105,9 @@ if projections:
             remove_projection(df.iloc[i]["id"], session_id)
             st.rerun()
 
-    # Download CSV
     csv = results_df.to_csv(index=False).encode("utf-8")
     st.download_button("📥 Download Results CSV", csv, file_name="bet_results.csv")
 
-    # Clear all projections
     if st.button("🧹 Clear All Projections"):
         clear_projections(session_id)
         st.rerun()
