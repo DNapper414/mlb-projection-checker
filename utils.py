@@ -1,43 +1,95 @@
 import requests
 
-# 🔄 Fetch boxscore data for a given game ID
+# ------------------
+# MLB Functions
+# ------------------
+
 def fetch_boxscore(game_id):
     url = f"https://statsapi.mlb.com/api/v1/game/{game_id}/boxscore"
-    resp = requests.get(url)
-    return resp.json() if resp.status_code == 200 else None
+    response = requests.get(url)
+    if response.status_code != 200:
+        return None
+    return response.json()
 
-# 📊 Get a specific stat for a given player
-def get_stat_for_player(boxscore, player_name, stat_key):
-    for team in ["home", "away"]:
-        for player in boxscore["teams"][team]["players"].values():
-            if player["person"]["fullName"].lower() == player_name.lower():
-                batting_stats = player.get("stats", {}).get("batting", {})
-                return batting_stats.get(stat_key, 0)
-    return None
-
-# ✅ Evaluate all projections against actual stats
-def evaluate_projections(projections, boxscores):
+def evaluate_projections(projections_df, boxscores):
     results = []
-    for _, row in projections.iterrows():
-        player = row["Player"]
-        stat_key = row["Metric"]
+    for _, row in projections_df.iterrows():
+        player_name = row["Player"].lower()
+        metric = row["Metric"]
         target = row["Target"]
-        actual = None
-        met = False
+        actual = 0
 
-        # Look for player's stat in all boxscores
         for box in boxscores:
-            actual = get_stat_for_player(box, player, stat_key)
-            if actual is not None:
-                met = actual >= target
+            for team in ["home", "away"]:
+                players = box["teams"][team]["players"]
+                for pid, pdata in players.items():
+                    full_name = pdata["person"]["fullName"].lower()
+                    if full_name == player_name:
+                        stats = pdata.get("stats", {}).get("batting", {})
+                        actual = stats.get(metric, 0)
+        results.append({
+            "Player": row["Player"],
+            "Metric": metric,
+            "Target": target,
+            "Actual": actual,
+            "✅ Met?": actual >= target
+        })
+    return results
+
+# ------------------
+# NBA Functions
+# ------------------
+
+def fetch_boxscore_nba(date_str):
+    # Uses https://www.balldontlie.io
+    url = f"https://www.balldontlie.io/api/v1/stats?start_date={date_str}&end_date={date_str}&per_page=100"
+    all_stats = []
+    page = 1
+    while True:
+        paged = f"{url}&page={page}"
+        r = requests.get(paged).json()
+        data = r.get("data", [])
+        all_stats.extend(data)
+        if r.get("meta", {}).get("next_page") is None:
+            break
+        page += 1
+    return all_stats
+
+def evaluate_projections_nba(projections_df, game_date):
+    boxscores = fetch_boxscore_nba(game_date)
+    results = []
+
+    for _, row in projections_df.iterrows():
+        name = row["Player"].lower()
+        metric = row["Metric"]
+        target = row["Target"]
+        actual = 0
+
+        for stat in boxscores:
+            full_name = f"{stat['player']['first_name']} {stat['player']['last_name']}".lower()
+            if full_name == name:
+                stats = stat
+                if metric == "PRA":
+                    actual = stats["pts"] + stats["reb"] + stats["ast"]
+                elif metric == "3pts made":
+                    actual = stats["fg3m"]
+                else:
+                    key_map = {
+                        "points": "pts",
+                        "assists": "ast",
+                        "rebounds": "reb",
+                        "steals": "stl",
+                        "blocks": "blk"
+                    }
+                    actual = stats.get(key_map[metric], 0)
                 break
 
         results.append({
-            "Player": player,
-            "Metric": stat_key,
+            "Player": row["Player"],
+            "Metric": metric,
             "Target": target,
-            "Actual": actual if actual is not None else "N/A",
-            "✅ Met?": "✅" if met else "❌"
+            "Actual": actual,
+            "✅ Met?": actual >= target
         })
 
     return results
